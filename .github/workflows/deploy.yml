@@ -56,10 +56,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22.19.0'
           
       - name: Install Wrangler
-        run: npm install -g wrangler
+        run: |
+          echo "Node.js version:"
+          node --version
+          echo "npm version:"
+          npm --version
+          echo "Installing Wrangler..."
+          npm install -g wrangler
         
       - name: Authenticate with Cloudflare
         run: |
@@ -89,6 +95,11 @@ jobs:
           
       - name: Verify Wrangler Setup
         run: |
+          echo "Node.js environment:"
+          echo "  Node: $(node --version)"
+          echo "  npm: $(npm --version)"
+          echo "  npx: $(npx --version)"
+          
           echo "Wrangler version:"
           wrangler --version
           
@@ -101,8 +112,17 @@ jobs:
           echo "Project structure:"
           ls -la
           
+          echo "Node.js path:"
+          which node
+          echo "npm path:"
+          which npm
+          
           echo "Wrangler configuration file:"
           cat wrangler.toml
+          
+          echo "Python environment:"
+          echo "  Python: $(python3 --version)"
+          echo "  pip: $(pip3 --version)"
           
           echo "Checking API token availability..."
           if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
