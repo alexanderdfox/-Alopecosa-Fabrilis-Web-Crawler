@@ -74,17 +74,30 @@ jobs:
             echo "✅ API token found, using token-based authentication"
             
             # Create wrangler config directory structure
+            echo "Creating Wrangler config directory..."
             mkdir -p ~/.wrangler/config
             
+            # Verify directory was created
+            if [ -d ~/.wrangler/config ]; then
+              echo "✅ Wrangler config directory created successfully"
+            else
+              echo "❌ Failed to create Wrangler config directory"
+              exit 1
+            fi
+            
             # Create wrangler config file with API token
+            echo "Creating Wrangler config file..."
             echo 'api_token = "${{ secrets.CLOUDFLARE_API_TOKEN }}"' > ~/.wrangler/config/default.toml
             
             # Verify the file was created
-            echo "Wrangler config created:"
-            ls -la ~/.wrangler/
-            ls -la ~/.wrangler/config/
-            echo "Config file contents (token hidden):"
-            cat ~/.wrangler/config/default.toml | sed 's/api_token = ".*"/api_token = "***HIDDEN***"/'
+            if [ -f ~/.wrangler/config/default.toml ]; then
+              echo "✅ Wrangler config file created successfully"
+              echo "Config file contents (token hidden):"
+              cat ~/.wrangler/config/default.toml | sed 's/api_token = ".*"/api_token = "***HIDDEN***"/'
+            else
+              echo "❌ Failed to create Wrangler config file"
+              exit 1
+            fi
             
             # Test authentication
             echo "Testing authentication..."
@@ -98,6 +111,11 @@ jobs:
             echo "⚠️  No API token found, will attempt deployment without explicit authentication"
             echo "Note: You may need to set CLOUDFLARE_API_TOKEN in your repository secrets"
             echo "Visit: https://dash.cloudflare.com/profile/api-tokens"
+            
+            # Create empty wrangler directory structure for verification
+            echo "Creating empty Wrangler directory structure..."
+            mkdir -p ~/.wrangler/config
+            echo "✅ Empty Wrangler directory structure created"
           fi
           
       - name: Verify Wrangler Setup
@@ -111,10 +129,26 @@ jobs:
           wrangler --version
           
           echo "Wrangler configuration:"
-          ls -la ~/.wrangler/
+          if [ -d ~/.wrangler ]; then
+            ls -la ~/.wrangler/
+            if [ -d ~/.wrangler/config ]; then
+              ls -la ~/.wrangler/config/
+            else
+              echo "⚠️  ~/.wrangler/config directory does not exist"
+            fi
+          else
+            echo "⚠️  ~/.wrangler directory does not exist"
+            echo "Creating it now..."
+            mkdir -p ~/.wrangler/config
+            echo "✅ Created ~/.wrangler/config directory"
+          fi
           
           echo "Current working directory:"
           pwd
+          
+          echo "Home directory:"
+          echo "  HOME: $HOME"
+          echo "  User: $(whoami)"
           
           echo "Project structure:"
           ls -la
