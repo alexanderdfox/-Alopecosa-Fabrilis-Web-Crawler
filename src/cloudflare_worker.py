@@ -232,7 +232,12 @@ class CloudflareCrawlerWorker:
             "Access-Control-Allow-Headers": "Content-Type"
         }
         
-        return Response(content, status=status_code, headers=headers)
+        # Create response using the standard Cloudflare Workers approach
+        return {
+            "body": content,
+            "status": status_code,
+            "headers": headers
+        }
 
 # Global worker instance
 worker = CloudflareCrawlerWorker()
@@ -244,11 +249,11 @@ def fetch(request, env, ctx):
         return worker.handle_request(request)
     except Exception as e:
         logger.error(f"Error in fetch handler: {e}")
-        return Response(
-            json.dumps({"error": "Internal server error"}),
-            status=500,
-            headers={"Content-Type": "application/json"}
-        )
+        return {
+            "body": json.dumps({"error": "Internal server error"}),
+            "status": 500,
+            "headers": {"Content-Type": "application/json"}
+        }
 
 # Alternative handler names that Cloudflare might expect
 def on_fetch(request, env, ctx):
