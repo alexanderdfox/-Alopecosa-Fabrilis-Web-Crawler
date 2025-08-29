@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 Search - Alopecosa Fabrilis Web Crawler</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    
+    <style>
+        .spider-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .spider-web {
+            background-image: 
+                radial-gradient(circle at 25% 25%, rgba(255,255,255,0.1) 2px, transparent 2px),
+                radial-gradient(circle at 75% 75%, rgba(255,255,255,0.1) 2px, transparent 2px);
+            background-size: 50px 50px;
+        }
+        .search-highlight {
+            background: rgba(255, 255, 0, 0.3);
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .result-card {
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .result-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(102, 126, 234, 0.5);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.2);
+        }
+        .external-link {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+        .external-link:hover {
+            color: #93c5fd;
+            text-decoration: underline;
+        }
+        .content-preview {
+            max-height: 100px;
+            overflow: hidden;
+            position: relative;
+        }
+        .content-preview::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 20px;
+            background: linear-gradient(transparent, rgba(17, 24, 39, 0.9));
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen spider-web">
+    <!-- Navigation Header -->
+    <nav class="spider-bg shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-3">
+                    <div class="text-3xl">🕷️</div>
+                    <div>
+                        <h1 class="text-xl font-bold">Alopecosa Fabrilis</h1>
+                        <p class="text-sm opacity-80">Search & Discovery</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="text-white hover:text-blue-200 transition-colors">
+                        <i class="fas fa-home mr-2"></i>Dashboard
+                    </a>
+                    <a href="/database" class="text-white hover:text-blue-200 transition-colors">
+                        <i class="fas fa-database mr-2"></i>Database
+                    </a>
+                    <a href="/search" class="text-blue-200 font-semibold">
+                        <i class="fas fa-search mr-2"></i>Search
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Hero Search Section -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-bold mb-4">🔍 Search Crawled Content</h1>
+            <p class="text-xl text-gray-300 mb-8">Discover and explore websites from our web crawling database</p>
+            
+            <!-- Main Search Bar -->
+            <div class="max-w-3xl mx-auto">
+                <div class="relative">
+                    <input type="text" id="main-search" 
+                           placeholder="Search for websites, content, or keywords..."
+                           class="w-full px-6 py-4 text-lg bg-gray-800 border-2 border-gray-600 rounded-full focus:ring-4 focus:ring-blue-500 focus:border-transparent transition-all duration-300">
+                    <button onclick="performMainSearch()" 
+                            class="absolute right-2 top-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full transition-colors duration-300">
+                        <i class="fas fa-search mr-2"></i>Search
+                    </button>
+                </div>
+                <p class="text-sm text-gray-400 mt-3">Press Enter to search or click the search button</p>
+            </div>
+        </div>
+
+        <!-- Advanced Search Options -->
+        <div class="glass-effect rounded-lg p-6 mb-8">
+            <h2 class="text-xl font-bold mb-4 flex items-center">
+                <i class="fas fa-sliders-h text-blue-400 mr-3"></i>
+                Advanced Search Options
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Domain</label>
+                    <select id="domain-filter" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="">All Domains</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Depth</label>
+                    <select id="depth-filter" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="">All Depths</option>
+                        <option value="0">0 (Root)</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3+</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Status Code</label>
+                    <select id="status-filter" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="">All Statuses</option>
+                        <option value="200">200 (OK)</option>
+                        <option value="404">404 (Not Found)</option>
+                        <option value="500">500 (Server Error)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Sort By</label>
+                    <select id="sort-by" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="relevance">Relevance</option>
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="title">Title A-Z</option>
+                        <option value="domain">Domain</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Results -->
+        <div id="search-results" class="space-y-6" style="display: none;">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold">Search Results</h2>
+                <div class="text-gray-400" id="result-count"></div>
+            </div>
+            
+            <div id="results-container" class="space-y-4">
+                <!-- Results will be populated here -->
+            </div>
+            
+            <!-- Pagination -->
+            <div id="pagination" class="flex justify-center mt-8">
+                <!-- Pagination will be populated here -->
+            </div>
+        </div>
+
+        <!-- No Results Message -->
+        <div id="no-results" class="text-center py-12" style="display: none;">
+            <div class="text-6xl mb-4">🔍</div>
+            <h3 class="text-2xl font-bold mb-2">No Results Found</h3>
+            <p class="text-gray-400 mb-6">Try adjusting your search terms or filters</p>
+            <button onclick="clearSearch()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors">
+                <i class="fas fa-undo mr-2"></i>Clear Search
+            </button>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div id="loading" class="text-center py-12" style="display: none;">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            <p class="mt-4 text-gray-400">Searching...</p>
+        </div>
+    </div>
+
+    <!-- Website Details Modal -->
+    <div id="website-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="glass-effect rounded-lg max-w-4xl w-full max-h-screen overflow-y-auto">
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-2xl font-bold" id="modal-title">Website Details</h2>
+                        <button onclick="closeWebsiteModal()" class="text-gray-400 hover:text-white text-2xl">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <div id="modal-content">
+                        <!-- Content will be populated here -->
+                    </div>
+                    
+                    <div class="mt-6 flex justify-end space-x-4">
+                        <button onclick="closeWebsiteModal()" class="px-6 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg transition-colors">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast" class="fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300 z-50">
+        <div class="flex items-center">
+            <i class="fas fa-check mr-2"></i>
+            <span id="toast-message">Success!</span>
+        </div>
+    </div>
+
+    <script>
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDomains();
+            setupEventListeners();
+        });
+
+        // Setup event listeners
+        function setupEventListeners() {
+            const mainSearch = document.getElementById('main-search');
+            mainSearch.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    performMainSearch();
+                }
+            });
+
+            // Filter change listeners
+            document.getElementById('domain-filter').addEventListener('change', performSearch);
+            document.getElementById('depth-filter').addEventListener('change', performSearch);
+            document.getElementById('status-filter').addEventListener('change', performSearch);
+            document.getElementById('sort-by').addEventListener('change', performSearch);
+        }
+
+        // Load domains for filter
+        function loadDomains() {
+            fetch('/api/database/domains')
+                .then(response => response.json())
+                .then(domains => {
+                    const domainFilter = document.getElementById('domain-filter');
+                    domainFilter.innerHTML = '<option value="">All Domains</option>';
+                    domains.forEach(domain => {
+                        const option = document.createElement('option');
+                        option.value = domain;
+                        option.textContent = domain;
+                        domainFilter.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error loading domains:', error));
+        }
+
+        // Perform main search
+        function performMainSearch() {
+            const query = document.getElementById('main-search').value.trim();
+            if (query) {
+                performSearch();
+            }
+        }
+
+        // Perform search with current filters
+        function performSearch() {
+            const query = document.getElementById('main-search').value.trim();
+            const domain = document.getElementById('domain-filter').value;
+            const depth = document.getElementById('depth-filter').value;
+            const status = document.getElementById('status-filter').value;
+            const sortBy = document.getElementById('sort-by').value;
+
+            if (!query && !domain && !depth && !status) {
+                showNoResults();
+                return;
+            }
+
+            showLoading();
+
+            const filters = {};
+            if (domain) filters.domain = domain;
+            if (depth) filters.depth = parseInt(depth);
+            if (status) filters.status_code = parseInt(status);
+
+            const params = new URLSearchParams();
+            if (query) params.append('q', query);
+            if (Object.keys(filters).length > 0) {
+                params.append('filters', JSON.stringify(filters));
+            }
+            if (sortBy !== 'relevance') {
+                params.append('sort', sortBy);
+            }
+
+            fetch(`/api/database/search?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.results && data.results.length > 0) {
+                        displaySearchResults(data.results, data.total_count, data.total_pages, data.page);
+                        showSearchResults();
+                    } else {
+                        showNoResults();
+                    }
+                })
+                .catch(error => {
+                    hideLoading();
+                    console.error('Search error:', error);
+                    showToast('Search failed. Please try again.', 'error');
+                });
+        }
+
+        // Display search results
+        function displaySearchResults(results, totalCount, totalPages, currentPage) {
+            const container = document.getElementById('results-container');
+            const resultCount = document.getElementById('result-count');
+            
+            resultCount.textContent = `Showing ${results.length} of ${totalCount} results`;
+            
+            container.innerHTML = results.map(result => `
+                <div class="result-card glass-effect rounded-lg p-6">
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="flex-1">
+                            <h3 class="text-xl font-bold mb-2">
+                                <a href="${result.url}" target="_blank" class="external-link hover:underline">
+                                    ${highlightSearchTerms(result.title || 'No Title')}
+                                    <i class="fas fa-external-link-alt ml-2 text-sm"></i>
+                                </a>
+                            </h3>
+                            <div class="flex items-center space-x-4 text-sm text-gray-400 mb-3">
+                                <span><i class="fas fa-globe mr-1"></i>${result.domain || 'Unknown'}</span>
+                                <span><i class="fas fa-layer-group mr-1"></i>Depth: ${result.depth || 0}</span>
+                                <span><i class="fas fa-clock mr-1"></i>${formatTimestamp(result.crawl_timestamp)}</span>
+                                <span><i class="fas fa-link mr-1"></i>${result.links_count || 0} links</span>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <span class="px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(result.status_code)}">
+                                ${result.status_code || 'Unknown'}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="content-preview mb-4">
+                        <p class="text-gray-300 leading-relaxed">
+                            ${highlightSearchTerms(result.content || 'No content available')}
+                        </p>
+                    </div>
+                    
+                    <div class="flex items-center justify-between">
+                        <div class="flex space-x-3">
+                            <button onclick="viewWebsiteDetails(${result.id})" 
+                                    class="text-blue-400 hover:text-blue-300 transition-colors">
+                                <i class="fas fa-info-circle mr-1"></i>Details
+                            </button>
+                            <a href="${result.url}" target="_blank" 
+                               class="text-green-400 hover:text-green-300 transition-colors">
+                                <i class="fas fa-external-link-alt mr-1"></i>Visit Original
+                            </a>
+                        </div>
+                        <div class="text-sm text-gray-500">
+                            Crawled in ${(result.crawl_time || 0).toFixed(2)}s
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Display pagination
+            if (totalPages > 1) {
+                displayPagination(currentPage, totalPages);
+            }
+        }
+
+        // Display pagination
+        function displayPagination(currentPage, totalPages) {
+            const pagination = document.getElementById('pagination');
+            let paginationHTML = '';
+            
+            // Previous button
+            if (currentPage > 1) {
+                paginationHTML += `<button onclick="goToPage(${currentPage - 1})" class="px-3 py-2 mx-1 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">Previous</button>`;
+            }
+            
+            // Page numbers
+            for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+                paginationHTML += `<button onclick="goToPage(${i})" class="px-3 py-2 mx-1 rounded-lg transition-colors ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}">${i}</button>`;
+            }
+            
+            // Next button
+            if (currentPage < totalPages) {
+                paginationHTML += `<button onclick="goToPage(${currentPage + 1})" class="px-3 py-2 mx-1 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">Next</button>`;
+            }
+            
+            pagination.innerHTML = paginationHTML;
+        }
+
+        // Go to specific page
+        function goToPage(page) {
+            // Update current page and re-run search
+            performSearch();
+        }
+
+        // View website details
+        function viewWebsiteDetails(websiteId) {
+            fetch(`/api/database/websites/${websiteId}`)
+                .then(response => response.json())
+                .then(website => {
+                    document.getElementById('modal-title').textContent = website.title || 'Website Details';
+                    document.getElementById('modal-content').innerHTML = `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-400 mb-1">URL</label>
+                                <a href="${website.url}" target="_blank" class="text-blue-400 hover:underline break-all">
+                                    ${website.url}
+                                </a>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-400 mb-1">Title</label>
+                                <p class="text-white">${website.title || 'No Title'}</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-400 mb-1">Content</label>
+                                <div class="bg-gray-800 p-4 rounded-lg max-h-64 overflow-y-auto">
+                                    <p class="text-gray-300 text-sm">${website.content || 'No content available'}</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-400 mb-1">Status Code</label>
+                                    <span class="px-2 py-1 rounded text-xs ${getStatusColor(website.status_code)}">${website.status_code || 'Unknown'}</span>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-400 mb-1">Crawl Time</label>
+                                    <p class="text-white">${(website.crawl_time || 0).toFixed(2)}s</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-400 mb-1">Depth</label>
+                                    <p class="text-white">${website.depth || 0}</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-400 mb-1">Links Count</label>
+                                    <p class="text-white">${website.links_count || 0}</p>
+                                </div>
+                            </div>
+                            ${website.outgoing_links && website.outgoing_links.length > 0 ? `
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-400 mb-1">Outgoing Links</label>
+                                    <div class="space-y-2">
+                                        ${website.outgoing_links.map(link => `
+                                            <a href="${link}" target="_blank" class="block text-blue-400 hover:underline text-sm">
+                                                ${link}
+                                            </a>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                    document.getElementById('website-modal').classList.remove('hidden');
+                })
+                .catch(error => {
+                    console.error('Error fetching website details:', error);
+                    showToast('Failed to load website details', 'error');
+                });
+        }
+
+        // Close website modal
+        function closeWebsiteModal() {
+            document.getElementById('website-modal').classList.add('hidden');
+        }
+
+        // Clear search
+        function clearSearch() {
+            document.getElementById('main-search').value = '';
+            document.getElementById('domain-filter').value = '';
+            document.getElementById('depth-filter').value = '';
+            document.getElementById('status-filter').value = '';
+            document.getElementById('sort-by').value = 'relevance';
+            hideSearchResults();
+            hideNoResults();
+        }
+
+        // Show/hide functions
+        function showSearchResults() {
+            document.getElementById('search-results').style.display = 'block';
+            document.getElementById('no-results').style.display = 'none';
+        }
+
+        function hideSearchResults() {
+            document.getElementById('search-results').style.display = 'none';
+        }
+
+        function showNoResults() {
+            document.getElementById('no-results').style.display = 'block';
+            document.getElementById('search-results').style.display = 'none';
+        }
+
+        function hideNoResults() {
+            document.getElementById('no-results').style.display = 'none';
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('search-results').style.display = 'none';
+            document.getElementById('no-results').style.display = 'none';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // Utility functions
+        function highlightSearchTerms(text) {
+            if (!text) return 'No content available';
+            const query = document.getElementById('main-search').value.trim();
+            if (!query) return text;
+            
+            const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+            return text.replace(regex, '<span class="search-highlight">$1</span>');
+        }
+
+        function getStatusColor(statusCode) {
+            if (statusCode >= 200 && statusCode < 300) return 'bg-green-600 text-white';
+            if (statusCode >= 400 && statusCode < 500) return 'bg-yellow-600 text-white';
+            if (statusCode >= 500) return 'bg-red-600 text-white';
+            return 'bg-gray-600 text-white';
+        }
+
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return 'Unknown';
+            try {
+                const date = new Date(timestamp);
+                return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+            } catch (e) {
+                return timestamp;
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            
+            toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300 z-50 ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white`;
+            toastMessage.textContent = message;
+            
+            toast.classList.remove('translate-x-full');
+            
+            setTimeout(() => {
+                toast.classList.add('translate-x-full');
+            }, 3000);
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('website-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeWebsiteModal();
+            }
+        });
+    </script>
+</body>
+</html>

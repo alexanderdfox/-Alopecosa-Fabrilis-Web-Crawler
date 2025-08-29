@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🕷️ Alopecosa Fabrilis Web Crawler</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    
+    <style>
+        .spider-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .spider-web {
+            background-image: 
+                radial-gradient(circle at 25% 25%, rgba(255,255,255,0.1) 2px, transparent 2px),
+                radial-gradient(circle at 75% 75%, rgba(255,255,255,0.1) 2px, transparent 2px);
+            background-size: 50px 50px;
+        }
+        .pulse-glow {
+            animation: pulse-glow 2s infinite;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(102, 126, 234, 0.5); }
+            50% { box-shadow: 0 0 30px rgba(102, 126, 234, 0.8); }
+        }
+        .crawler-card {
+            transition: all 0.3s ease;
+        }
+        .crawler-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        .status-ready { background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%); }
+        .status-running { background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); }
+        .status-completed { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); }
+        .status-error { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen spider-web">
+    <!-- Navigation Header -->
+    <nav class="spider-bg shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-3">
+                    <div class="text-3xl">🕷️</div>
+                    <div>
+                        <h1 class="text-xl font-bold">Alopecosa Fabrilis</h1>
+                        <p class="text-sm opacity-80">Spider-Inspired Web Crawler</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/database" class="text-white hover:text-blue-200 transition-colors">
+                        <i class="fas fa-database mr-2"></i>Database
+                    </a>
+                    <a href="/search" class="text-white hover:text-blue-200 transition-colors">
+                        <i class="fas fa-search mr-2"></i>Search
+                    </a>
+                    <a href="/batch" class="text-white hover:text-blue-200 transition-colors">
+                        <i class="fas fa-layer-group mr-2"></i>Batch Processing
+                    </a>
+                    <div class="text-sm opacity-80">
+                        <i class="fas fa-circle text-green-400 mr-2"></i>
+                        <span id="connection-status">Connecting...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Dashboard Overview -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+            <div class="glass-effect rounded-lg p-6 text-center">
+                <div class="text-3xl mb-2">🕸️</div>
+                <h3 class="text-lg font-semibold mb-2">Active Crawlers</h3>
+                <p class="text-3xl font-bold text-blue-400" id="active-crawlers-count">0</p>
+            </div>
+            <div class="glass-effect rounded-lg p-6 text-center">
+                <div class="text-3xl mb-2">📊</div>
+                <h3 class="text-lg font-semibold mb-2">Pages Crawled</h3>
+                <p class="text-3xl font-bold text-green-400" id="total-pages">0</p>
+            </div>
+            <div class="glass-effect rounded-lg p-6 text-center">
+                <div class="text-3xl mb-2">🔗</div>
+                <h3 class="text-lg font-semibold mb-2">Links Found</h3>
+                <p class="text-3xl font-bold text-purple-400" id="total-links">0</p>
+            </div>
+            <div class="glass-effect rounded-lg p-6 text-center">
+                <div class="text-3xl mb-2">⏱️</div>
+                <h3 class="text-lg font-semibold mb-2">Avg Time</h3>
+                <p class="text-3xl font-bold text-yellow-400" id="avg-time">0s</p>
+            </div>
+        </div>
+
+        <!-- Create New Crawler -->
+        <div class="glass-effect rounded-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fas fa-plus-circle text-blue-400 mr-3"></i>
+                Create New Crawler
+            </h2>
+            <form id="crawler-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Crawler Name</label>
+                    <input type="text" id="crawler-name" placeholder="My Spider" 
+                           class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Target URL</label>
+                    <input type="url" id="base-url" placeholder="https://example.com" required
+                           class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Max Depth</label>
+                    <input type="number" id="max-depth" min="1" max="10" value="3"
+                           class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Max Pages</label>
+                    <input type="number" id="max-pages" min="1" max="1000" value="100"
+                           class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200 pulse-glow">
+                        <i class="fas fa-spider mr-2"></i>Create Crawler
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Active Crawlers -->
+        <div class="glass-effect rounded-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fas fa-spider text-green-400 mr-3"></i>
+                Active Crawlers
+            </h2>
+            <div id="crawlers-container" class="space-y-4">
+                <!-- Crawlers will be dynamically added here -->
+            </div>
+        </div>
+
+        <!-- Database Overview -->
+        <div class="glass-effect rounded-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fas fa-database text-blue-400 mr-3"></i>
+                Database Overview
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div class="text-center">
+                    <div class="text-3xl mb-2">📊</div>
+                    <h3 class="text-lg font-semibold mb-2">Total Websites</h3>
+                    <p class="text-3xl font-bold text-blue-400" id="db-total-websites">-</p>
+                </div>
+                <div class="text-center">
+                    <div class="text-3xl mb-2">🔗</div>
+                    <h3 class="text-lg font-semibold mb-2">Total Links</h3>
+                    <p class="text-3xl font-bold text-green-400" id="db-total-links">-</p>
+                </div>
+                <div class="text-center">
+                    <div class="text-3xl mb-2">🌐</div>
+                    <h3 class="text-lg font-semibold mb-2">Domains</h3>
+                    <p class="text-3xl font-bold text-purple-400" id="db-unique-domains">-</p>
+                </div>
+            </div>
+            <div class="text-center">
+                <a href="/database" class="inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-200">
+                    <i class="fas fa-search mr-2"></i>Search Database
+                </a>
+            </div>
+        </div>
+
+        <!-- Crawl History -->
+        <div class="glass-effect rounded-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fas fa-history text-purple-400 mr-3"></i>
+                Crawl History
+            </h2>
+            <div id="history-container" class="space-y-4">
+                <!-- History will be dynamically added here -->
+            </div>
+        </div>
+
+        <!-- Statistics Chart -->
+        <div class="glass-effect rounded-lg p-6">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fas fa-chart-line text-yellow-400 mr-3"></i>
+                Crawling Statistics
+            </h2>
+            <div class="h-64">
+                <canvas id="stats-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Modal -->
+    <div id="results-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-gray-800 rounded-lg max-w-4xl w-full max-h-screen overflow-y-auto">
+                <div class="p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold">Crawl Results</h3>
+                        <button onclick="closeResultsModal()" class="text-gray-400 hover:text-white">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    <div id="results-content" class="space-y-4">
+                        <!-- Results will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loading-spinner" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen">
+            <div class="text-center">
+                <div class="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                <p class="text-xl text-white">Spider is crawling...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2">
+        <!-- Toasts will be dynamically added here -->
+    </div>
+
+    <script>
+        // Initialize Socket.IO
+        const socket = io();
+        
+        // Global variables
+        let crawlers = {};
+        let history = [];
+        let statsChart = null;
+        
+        // Connection status
+        socket.on('connect', function() {
+            document.getElementById('connection-status').textContent = 'Connected';
+            document.getElementById('connection-status').parentElement.querySelector('i').className = 'fas fa-circle text-green-400 mr-2';
+            showToast('Connected to Alopecosa Crawler', 'success');
+        });
+        
+        socket.on('disconnect', function() {
+            document.getElementById('connection-status').textContent = 'Disconnected';
+            document.getElementById('connection-status').parentElement.querySelector('i').className = 'fas fa-circle text-red-400 mr-2';
+            showToast('Disconnected from server', 'error');
+        });
+        
+        // Crawler status updates
+        socket.on('crawler_status', function(data) {
+            updateCrawlerStatus(data.crawler_id, data.status, data.progress);
+        });
+        
+        socket.on('crawler_completed', function(data) {
+            updateCrawlerStatus(data.crawler_id, 'completed', 100);
+            showToast(`Crawler completed! Found ${data.results_count} pages`, 'success');
+            loadCrawlers();
+            loadHistory();
+            loadDatabaseStats();
+            updateDashboard();
+        });
+        
+        socket.on('crawler_error', function(data) {
+            updateCrawlerStatus(data.crawler_id, 'error', 0);
+            showToast(`Crawler error: ${data.error}`, 'error');
+        });
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeChart();
+            loadCrawlers();
+            loadHistory();
+            loadDatabaseStats();
+            updateDashboard();
+            
+            // Form submission
+            document.getElementById('crawler-form').addEventListener('submit', createCrawler);
+        });
+        
+        // Create new crawler
+        async function createCrawler(e) {
+            e.preventDefault();
+            
+            const formData = {
+                name: document.getElementById('crawler-name').value || 'Unnamed Crawler',
+                base_url: document.getElementById('base-url').value,
+                max_depth: parseInt(document.getElementById('max-depth').value),
+                max_pages: parseInt(document.getElementById('max-pages').value),
+                delay: 1.0
+            };
+            
+            try {
+                const response = await fetch('/api/crawlers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('Crawler created successfully!', 'success');
+                    document.getElementById('crawler-form').reset();
+                    loadCrawlers();
+                } else {
+                    showToast(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showToast('Error creating crawler', 'error');
+            }
+        }
+        
+        // Load crawlers
+        async function loadCrawlers() {
+            try {
+                const response = await fetch('/api/crawlers');
+                crawlers = await response.json();
+                displayCrawlers();
+            } catch (error) {
+                console.error('Error loading crawlers:', error);
+            }
+        }
+        
+        // Display crawlers
+        function displayCrawlers() {
+            const container = document.getElementById('crawlers-container');
+            container.innerHTML = '';
+            
+            if (Object.keys(crawlers).length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-center py-8">No crawlers created yet. Create your first spider above!</p>';
+                return;
+            }
+            
+            Object.entries(crawlers).forEach(([id, crawler]) => {
+                const card = createCrawlerCard(id, crawler);
+                container.appendChild(card);
+            });
+        }
+        
+        // Create crawler card
+        function createCrawlerCard(id, crawler) {
+            const card = document.createElement('div');
+            card.className = 'crawler-card bg-gray-800 rounded-lg p-6 border border-gray-700';
+            
+            const statusClass = `status-${crawler.status}`;
+            const statusText = crawler.status.charAt(0).toUpperCase() + crawler.status.slice(1);
+            
+            card.innerHTML = `
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-white">${crawler.name}</h3>
+                        <p class="text-gray-400">${crawler.base_url}</p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <span class="px-3 py-1 rounded-full text-sm font-medium ${statusClass} text-white">
+                            ${statusText}
+                        </span>
+                        <button onclick="deleteCrawler('${id}')" class="text-red-400 hover:text-red-300">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div class="text-center">
+                        <p class="text-sm text-gray-400">Depth</p>
+                        <p class="font-bold">${crawler.config.max_depth}</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-sm text-gray-400">Max Pages</p>
+                        <p class="font-bold">${crawler.config.max_pages}</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-sm text-gray-400">Progress</p>
+                        <p class="font-bold">${crawler.progress}%</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-sm text-gray-400">Results</p>
+                        <p class="font-bold">${crawler.results_count}</p>
+                    </div>
+                </div>
+                
+                ${crawler.status === 'ready' ? `
+                    <button onclick="startCrawler('${id}')" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200">
+                        <i class="fas fa-play mr-2"></i>Start Crawling
+                    </button>
+                ` : ''}
+                
+                ${crawler.status === 'running' ? `
+                    <div class="w-full bg-gray-700 rounded-full h-2 mb-4">
+                        <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: ${crawler.progress}%"></div>
+                    </div>
+                    <p class="text-center text-blue-400">🕷️ Spider is hunting...</p>
+                ` : ''}
+                
+                ${crawler.status === 'completed' ? `
+                    <div class="flex space-x-2">
+                        <button onclick="viewResults('${id}')" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200">
+                            <i class="fas fa-eye mr-2"></i>View Results
+                        </button>
+                        <button onclick="checkDatabaseStatus('${id}')" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200">
+                            <i class="fas fa-database mr-2"></i>Check Database
+                        </button>
+                    </div>
+                ` : ''}
+                
+                ${crawler.status === 'error' ? `
+                    <div class="bg-red-900 border border-red-700 rounded-lg p-3">
+                        <p class="text-red-300 text-sm">${crawler.logs[crawler.logs.length - 1] || 'Unknown error'}</p>
+                    </div>
+                ` : ''}
+            `;
+            
+            return card;
+        }
+        
+        // Start crawler
+        async function startCrawler(id) {
+            try {
+                const response = await fetch(`/api/crawlers/${id}/start`, { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('Crawler started!', 'success');
+                    loadCrawlers();
+                } else {
+                    showToast(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showToast('Error starting crawler', 'error');
+            }
+        }
+        
+        // Delete crawler
+        async function deleteCrawler(id) {
+            if (!confirm('Are you sure you want to delete this crawler?')) return;
+            
+            try {
+                const response = await fetch(`/api/crawlers/${id}`, { method: 'DELETE' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('Crawler deleted', 'success');
+                    loadCrawlers();
+                } else {
+                    showToast(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showToast('Error deleting crawler', 'error');
+            }
+        }
+        
+        // View results
+        async function viewResults(id) {
+            try {
+                const response = await fetch(`/api/crawlers/${id}/results`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    showToast(data.error, 'error');
+                    return;
+                }
+                
+                displayResults(data.results, data.stats);
+                document.getElementById('results-modal').classList.remove('hidden');
+            } catch (error) {
+                showToast('Error loading results', 'error');
+            }
+        }
+        
+        // Display results
+        function displayResults(results, stats) {
+            const container = document.getElementById('results-content');
+            
+            let html = `
+                <div class="bg-gray-700 rounded-lg p-4 mb-4">
+                    <h4 class="font-bold mb-2">Crawl Statistics</h4>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div><span class="text-gray-400">Pages:</span> ${stats.total_pages}</div>
+                        <div><span class="text-gray-400">Links:</span> ${stats.total_links_discovered}</div>
+                        <div><span class="text-gray-400">Success Rate:</span> ${(stats.success_rate * 100).toFixed(1)}%</div>
+                        <div><span class="text-gray-400">Avg Time:</span> ${stats.average_crawl_time.toFixed(2)}s</div>
+                    </div>
+                </div>
+            `;
+            
+            results.forEach((result, index) => {
+                html += `
+                    <div class="bg-gray-700 rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <h4 class="font-bold text-blue-400">${result.title || 'No Title'}</h4>
+                            <span class="text-sm text-gray-400">#${index + 1}</span>
+                        </div>
+                        <p class="text-gray-300 mb-2">${result.url}</p>
+                        <p class="text-gray-400 text-sm mb-2">${result.content.substring(0, 200)}${result.content.length > 200 ? '...' : ''}</p>
+                        <div class="flex justify-between text-sm text-gray-500">
+                            <span>Links: ${result.links.length}</span>
+                            <span>Status: ${result.status_code}</span>
+                            <span>Time: ${result.crawl_time.toFixed(2)}s</span>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // Check database status
+        async function checkDatabaseStatus(id) {
+            try {
+                // Show loading state
+                const button = event.target;
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Checking...';
+                button.disabled = true;
+                
+                const response = await fetch(`/api/crawlers/${id}/save`, { 
+                    method: 'GET'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast(result.message, 'success');
+                } else {
+                    showToast(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error checking database status:', error);
+                showToast('Error checking database status', 'error');
+            } finally {
+                // Restore button state
+                const button = event.target;
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+        
+        // Close results modal
+        function closeResultsModal() {
+            document.getElementById('results-modal').classList.add('hidden');
+        }
+        
+        // Load history
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/history');
+                history = await response.json();
+                displayHistory();
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
+        }
+        
+        // Load database statistics
+        async function loadDatabaseStats() {
+            try {
+                const response = await fetch('/api/database/statistics');
+                const stats = await response.json();
+                
+                document.getElementById('db-total-websites').textContent = stats.total_websites || 0;
+                document.getElementById('db-total-links').textContent = stats.total_links || 0;
+                document.getElementById('db-unique-domains').textContent = stats.unique_domains || 0;
+                
+            } catch (error) {
+                console.error('Error loading database statistics:', error);
+                // Don't show error toast for database stats as it's not critical
+            }
+        }
+        
+        // Display history
+        function displayHistory() {
+            const container = document.getElementById('history-container');
+            
+            if (history.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-center py-8">No crawl history yet.</p>';
+                return;
+            }
+            
+            container.innerHTML = history.map(entry => `
+                <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h4 class="font-bold">${entry.name}</h4>
+                            <p class="text-gray-400 text-sm">${entry.base_url}</p>
+                            <p class="text-gray-500 text-xs">
+                                ${new Date(entry.start_time).toLocaleString()} - 
+                                ${entry.end_time ? new Date(entry.end_time).toLocaleString() : 'Running...'}
+                            </p>
+                        </div>
+                        <div class="text-right">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium status-${entry.status} text-white">
+                                ${entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+                            </span>
+                            <p class="text-sm text-gray-400 mt-1">${entry.results_count} pages</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Update dashboard
+        function updateDashboard() {
+            const activeCount = Object.values(crawlers).filter(c => c.status === 'running').length;
+            const totalPages = Object.values(crawlers).reduce((sum, c) => sum + c.results_count, 0);
+            const totalLinks = Object.values(crawlers).reduce((sum, c) => {
+                return sum + (c.stats.total_links_discovered || 0);
+            }, 0);
+            const avgTime = Object.values(crawlers).filter(c => c.stats.average_crawl_time).length > 0 
+                ? Object.values(crawlers).filter(c => c.stats.average_crawl_time).reduce((sum, c) => sum + c.stats.average_crawl_time, 0) / Object.values(crawlers).filter(c => c.stats.average_crawl_time).length
+                : 0;
+            
+            document.getElementById('active-crawlers-count').textContent = activeCount;
+            document.getElementById('total-pages').textContent = totalPages;
+            document.getElementById('total-links').textContent = totalLinks;
+            document.getElementById('avg-time').textContent = avgTime.toFixed(1) + 's';
+        }
+        
+        // Initialize chart
+        function initializeChart() {
+            const ctx = document.getElementById('stats-chart').getContext('2d');
+            statsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Pages Crawled',
+                        data: [],
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: 'white' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: 'white' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: {
+                            ticks: { color: 'white' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Update crawler status
+        function updateCrawlerStatus(crawlerId, status, progress) {
+            if (crawlers[crawlerId]) {
+                crawlers[crawlerId].status = status;
+                crawlers[crawlerId].progress = progress;
+                displayCrawlers();
+                updateDashboard();
+            }
+        }
+        
+        // Show toast notification
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colors = {
+                success: 'bg-green-600',
+                error: 'bg-red-600',
+                warning: 'bg-yellow-600',
+                info: 'bg-blue-600'
+            };
+            
+            toast.className = `${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full`;
+            toast.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'exclamation-triangle' : 'info-circle'} mr-2"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Animate in
+            setTimeout(() => toast.classList.remove('translate-x-full'), 100);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                toast.classList.add('translate-x-full');
+                setTimeout(() => container.removeChild(toast), 300);
+            }, 5000);
+        }
+        
+        // Auto-refresh every 5 seconds
+        setInterval(() => {
+            if (Object.values(crawlers).some(c => c.status === 'running')) {
+                loadCrawlers();
+                updateDashboard();
+            }
+        }, 5000);
+        
+        // Also refresh when no crawlers are running (for status updates)
+        setInterval(() => {
+            if (Object.keys(crawlers).length > 0) {
+                loadCrawlers();
+                updateDashboard();
+            }
+        }, 10000);
+    </script>
+</body>
+</html>

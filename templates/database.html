@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 Database Search - Alopecosa Fabrilis Web Crawler</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    
+    <style>
+        .spider-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .spider-web {
+            background-image: 
+                radial-gradient(circle at 25% 25%, rgba(255,255,255,0.1) 2px, transparent 2px),
+                radial-gradient(circle at 75% 75%, rgba(255,255,255,0.1) 2px, transparent 2px);
+            background-size: 50px 50px;
+        }
+        .search-highlight {
+            background: rgba(255, 255, 0, 0.3);
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen spider-web">
+    <!-- Navigation Header -->
+    <nav class="spider-bg shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-3">
+                    <div class="text-3xl">🕷️</div>
+                    <div>
+                        <h1 class="text-xl font-bold">Alopecosa Fabrilis</h1>
+                        <p class="text-sm opacity-80">Database Search Interface</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="text-white hover:text-blue-200 transition-colors">
+                        <i class="fas fa-home mr-2"></i>Dashboard
+                    </a>
+                    <a href="/search" class="text-white hover:text-blue-200 transition-colors">
+                        <i class="fas fa-search mr-2"></i>Search
+                    </a>
+                    <a href="/database" class="text-blue-200 font-semibold">
+                        <i class="fas fa-database mr-2"></i>Database
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Database Overview -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+            <div class="glass-effect rounded-lg p-6 text-center">
+                <div class="text-3xl mb-2">📊</div>
+                <h3 class="text-lg font-semibold mb-2">Total Websites</h3>
+                <p class="text-3xl font-bold text-blue-400" id="total-websites">-</p>
+            </div>
+            <div class="glass-effect rounded-lg p-6 text-center">
+                <div class="text-3xl mb-2">🔗</div>
+                <h3 class="text-lg font-semibold mb-2">Total Links</h3>
+                <p class="text-3xl font-bold text-green-400" id="total-links">-</p>
+            </div>
+            <div class="glass-effect rounded-lg p-6 text-center">
+                <div class="text-3xl mb-2">🌐</div>
+                <h3 class="text-lg font-semibold mb-2">Domains</h3>
+                <p class="text-3xl font-bold text-purple-400" id="unique-domains">-</p>
+            </div>
+            <div class="glass-effect rounded-lg p-6 text-center">
+                <div class="text-3xl mb-2">📅</div>
+                <h3 class="text-lg font-semibold mb-2">Recent Activity</h3>
+                <p class="text-3xl font-bold text-yellow-400" id="recent-activity">-</p>
+            </div>
+        </div>
+
+        <!-- Search Interface -->
+        <div class="glass-effect rounded-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fas fa-search text-blue-400 mr-3"></i>
+                Search Crawled Websites
+            </h2>
+            
+            <form id="search-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Search Query</label>
+                    <input type="text" id="search-query" placeholder="Enter keywords..." 
+                           class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Domain</label>
+                    <select id="domain-filter" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="">All Domains</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Depth</label>
+                    <select id="depth-filter" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="">All Depths</option>
+                        <option value="0">0 (Root)</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5+</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Status Code</label>
+                    <select id="status-filter" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="">All Status Codes</option>
+                        <option value="200">200 (OK)</option>
+                        <option value="404">404 (Not Found)</option>
+                        <option value="500">500 (Server Error)</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200">
+                        <i class="fas fa-search mr-2"></i>Search
+                    </button>
+                </div>
+            </form>
+            
+            <!-- Advanced Search Options -->
+            <div class="border-t border-gray-600 pt-4">
+                <button id="advanced-toggle" class="text-blue-400 hover:text-blue-300 text-sm">
+                    <i class="fas fa-cog mr-2"></i>Advanced Options
+                </button>
+                <div id="advanced-options" class="hidden mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Results per Page</label>
+                        <select id="results-per-page" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg">
+                            <option value="10">10</option>
+                            <option value="20" selected>20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Sort By</label>
+                        <select id="sort-by" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg">
+                            <option value="timestamp">Crawl Time</option>
+                            <option value="title">Title</option>
+                            <option value="domain">Domain</option>
+                            <option value="depth">Depth</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Content Length</label>
+                        <select id="content-filter" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg">
+                            <option value="">Any Length</option>
+                            <option value="short">Short (< 100 chars)</option>
+                            <option value="medium">Medium (100-500 chars)</option>
+                            <option value="long">Long (> 500 chars)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Results -->
+        <div class="glass-effect rounded-lg p-6 mb-8">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold flex items-center">
+                    <i class="fas fa-list text-green-400 mr-3"></i>
+                    Search Results
+                </h2>
+                <div class="text-sm text-gray-400">
+                    <span id="results-count">0</span> results found
+                </div>
+            </div>
+            
+            <div id="search-results" class="space-y-4">
+                <div class="text-center text-gray-400 py-12">
+                    <i class="fas fa-search text-4xl mb-4"></i>
+                    <p>Enter a search query to find crawled websites</p>
+                </div>
+            </div>
+            
+            <!-- Pagination -->
+            <div id="pagination" class="hidden mt-6 flex justify-center">
+                <nav class="flex space-x-2">
+                    <button id="prev-page" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i class="fas fa-chevron-left mr-2"></i>Previous
+                    </button>
+                    <div id="page-numbers" class="flex space-x-1"></div>
+                    <button id="next-page" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                        Next<i class="fas fa-chevron-right ml-2"></i>
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Database Management -->
+        <div class="glass-effect rounded-lg p-6">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fas fa-database text-purple-400 mr-3"></i>
+                Database Management
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Crawl Sessions -->
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Recent Crawl Sessions</h3>
+                    <div id="crawl-sessions" class="space-y-2">
+                        <!-- Sessions will be loaded here -->
+                    </div>
+                </div>
+                
+                <!-- Database Actions -->
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Database Actions</h3>
+                    <div class="space-y-3">
+                        <button id="refresh-stats" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh Statistics
+                        </button>
+                        <button id="cleanup-data" class="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200">
+                            <i class="fas fa-broom mr-2"></i>Clean Up Old Data
+                        </button>
+                        <button id="export-data" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200">
+                            <i class="fas fa-download mr-2"></i>Export Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Website Details Modal -->
+    <div id="website-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-gray-800 rounded-lg max-w-4xl w-full max-h-screen overflow-y-auto">
+                <div class="p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold">Website Details</h3>
+                        <button onclick="closeWebsiteModal()" class="text-gray-400 hover:text-white">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    <div id="website-content" class="space-y-4">
+                        <!-- Website details will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loading-spinner" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen">
+            <div class="text-center">
+                <div class="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                <p class="text-xl text-white">Searching database...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2">
+        <!-- Toasts will be dynamically added here -->
+    </div>
+
+    <script>
+        // Global variables
+        let currentPage = 1;
+        let totalPages = 1;
+        let searchQuery = '';
+        let searchFilters = {};
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDatabaseStatistics();
+            loadDomains();
+            loadCrawlSessions();
+            
+            // Form submission
+            document.getElementById('search-form').addEventListener('submit', performSearch);
+            
+            // Advanced options toggle
+            document.getElementById('advanced-toggle').addEventListener('click', toggleAdvancedOptions);
+            
+            // Database management buttons
+            document.getElementById('refresh-stats').addEventListener('click', loadDatabaseStatistics);
+            document.getElementById('cleanup-data').addEventListener('click', cleanupOldData);
+            document.getElementById('export-data').addEventListener('click', exportDatabaseData);
+        });
+        
+        // Load database statistics
+        async function loadDatabaseStatistics() {
+            try {
+                const response = await fetch('/api/database/statistics');
+                const stats = await response.json();
+                
+                document.getElementById('total-websites').textContent = stats.total_websites || 0;
+                document.getElementById('total-links').textContent = stats.total_links || 0;
+                document.getElementById('unique-domains').textContent = stats.unique_domains || 0;
+                document.getElementById('recent-activity').textContent = stats.websites_last_7_days || 0;
+                
+            } catch (error) {
+                console.error('Error loading database statistics:', error);
+                showToast('Error loading database statistics', 'error');
+            }
+        }
+        
+        // Load domains for filter
+        async function loadDomains() {
+            try {
+                const response = await fetch('/api/database/domains');
+                const domains = await response.json();
+                
+                const domainFilter = document.getElementById('domain-filter');
+                domainFilter.innerHTML = '<option value="">All Domains</option>';
+                
+                domains.forEach(domain => {
+                    const option = document.createElement('option');
+                    option.value = domain;
+                    option.textContent = domain;
+                    domainFilter.appendChild(option);
+                });
+                
+            } catch (error) {
+                console.error('Error loading domains:', error);
+            }
+        }
+        
+        // Load crawl sessions
+        async function loadCrawlSessions() {
+            try {
+                const response = await fetch('/api/database/sessions?limit=5');
+                const sessions = await response.json();
+                
+                const container = document.getElementById('crawl-sessions');
+                container.innerHTML = '';
+                
+                if (sessions.length === 0) {
+                    container.innerHTML = '<p class="text-gray-400 text-sm">No crawl sessions found</p>';
+                    return;
+                }
+                
+                sessions.forEach(session => {
+                    const sessionDiv = document.createElement('div');
+                    sessionDiv.className = 'bg-gray-700 rounded-lg p-3 text-sm';
+                    sessionDiv.innerHTML = `
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="font-semibold text-blue-400">${session.session_name}</span>
+                            <span class="text-xs text-gray-400">${new Date(session.created_at).toLocaleDateString()}</span>
+                        </div>
+                        <p class="text-gray-300 text-xs">${session.base_url}</p>
+                        <p class="text-gray-400 text-xs">${session.pages_crawled} pages • Depth ${session.max_depth}</p>
+                    `;
+                    container.appendChild(sessionDiv);
+                });
+                
+            } catch (error) {
+                console.error('Error loading crawl sessions:', error);
+            }
+        }
+        
+        // Perform search
+        async function performSearch(e) {
+            e.preventDefault();
+            
+            // Get search parameters
+            searchQuery = document.getElementById('search-query').value.trim();
+            const domain = document.getElementById('domain-filter').value;
+            const depth = document.getElementById('depth-filter').value;
+            const statusCode = document.getElementById('status-filter').value;
+            const resultsPerPage = parseInt(document.getElementById('results-per-page').value);
+            
+            searchFilters = {};
+            if (domain) searchFilters.domain = domain;
+            if (depth) searchFilters.depth = parseInt(depth);
+            if (statusCode) searchFilters.status_code = parseInt(statusCode);
+            
+            currentPage = 1;
+            
+            // Show loading
+            document.getElementById('loading-spinner').classList.remove('hidden');
+            
+            try {
+                const params = new URLSearchParams({
+                    q: searchQuery,
+                    page: currentPage,
+                    limit: resultsPerPage,
+                    ...searchFilters
+                });
+                
+                const response = await fetch(`/api/database/search?${params}`);
+                const data = await response.json();
+                
+                displaySearchResults(data.results, data.total_count, data.total_pages);
+                
+            } catch (error) {
+                console.error('Error performing search:', error);
+                showToast('Error performing search', 'error');
+            } finally {
+                document.getElementById('loading-spinner').classList.add('hidden');
+            }
+        }
+        
+        // Display search results
+        function displaySearchResults(results, totalCount, totalPages) {
+            const container = document.getElementById('search-results');
+            const countElement = document.getElementById('results-count');
+            
+            countElement.textContent = totalCount;
+            
+            if (results.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-gray-400 py-12">
+                        <i class="fas fa-search text-4xl mb-4"></i>
+                        <p>No results found for "${searchQuery}"</p>
+                        <p class="text-sm mt-2">Try adjusting your search criteria</p>
+                    </div>
+                `;
+                document.getElementById('pagination').classList.add('hidden');
+                return;
+            }
+            
+            container.innerHTML = results.map(website => `
+                <div class="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-colors cursor-pointer" onclick="viewWebsiteDetails(${website.id})">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex-1">
+                            <h4 class="font-bold text-blue-400 text-lg mb-1">${highlightSearchTerms(website.title || 'No Title')}</h4>
+                            <p class="text-gray-300 text-sm mb-2">${website.url}</p>
+                            <p class="text-gray-400 text-sm">${highlightSearchTerms(website.content)}</p>
+                        </div>
+                        <div class="text-right ml-4">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(website.status_code)} text-white">
+                                ${website.status_code}
+                            </span>
+                            <p class="text-sm text-gray-400 mt-1">${website.domain}</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-sm text-gray-500">
+                        <span>Depth: ${website.depth}</span>
+                        <span>Links: ${website.links_count}</span>
+                        <span>Crawled: ${new Date(website.crawl_timestamp).toLocaleString()}</span>
+                    </div>
+                </div>
+            `).join('');
+            
+            // Show pagination
+            if (totalPages > 1) {
+                displayPagination(totalPages);
+                document.getElementById('pagination').classList.remove('hidden');
+            } else {
+                document.getElementById('pagination').classList.add('hidden');
+            }
+        }
+        
+        // Display pagination
+        function displayPagination(totalPages) {
+            const pageNumbers = document.getElementById('page-numbers');
+            const prevButton = document.getElementById('prev-page');
+            const nextButton = document.getElementById('next-page');
+            
+            // Update button states
+            prevButton.disabled = currentPage === 1;
+            nextButton.disabled = currentPage === totalPages;
+            
+            // Generate page numbers
+            pageNumbers.innerHTML = '';
+            const startPage = Math.max(1, currentPage - 2);
+            const endPage = Math.min(totalPages, currentPage + 2);
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const pageButton = document.createElement('button');
+                pageButton.className = `px-3 py-2 rounded-lg ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`;
+                pageButton.textContent = i;
+                pageButton.onclick = () => goToPage(i);
+                pageNumbers.appendChild(pageButton);
+            }
+        }
+        
+        // Navigate to specific page
+        async function goToPage(page) {
+            currentPage = page;
+            
+            document.getElementById('loading-spinner').classList.remove('hidden');
+            
+            try {
+                const params = new URLSearchParams({
+                    q: searchQuery,
+                    page: currentPage,
+                    limit: parseInt(document.getElementById('results-per-page').value),
+                    ...searchFilters
+                });
+                
+                const response = await fetch(`/api/database/search?${params}`);
+                const data = await response.json();
+                
+                displaySearchResults(data.results, data.total_count, data.total_pages);
+                
+                // Scroll to top
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                
+            } catch (error) {
+                console.error('Error navigating to page:', error);
+                showToast('Error loading page', 'error');
+            } finally {
+                document.getElementById('loading-spinner').classList.add('hidden');
+            }
+        }
+        
+        // Previous page
+        document.getElementById('prev-page').addEventListener('click', () => {
+            if (currentPage > 1) {
+                goToPage(currentPage - 1);
+            }
+        });
+        
+        // Next page
+        document.getElementById('next-page').addEventListener('click', () => {
+            if (currentPage < totalPages) {
+                goToPage(currentPage + 1);
+            }
+        });
+        
+        // View website details
+        async function viewWebsiteDetails(websiteId) {
+            try {
+                const response = await fetch(`/api/database/websites/${websiteId}`);
+                const website = await response.json();
+                
+                displayWebsiteDetails(website);
+                document.getElementById('website-modal').classList.remove('hidden');
+                
+            } catch (error) {
+                console.error('Error loading website details:', error);
+                showToast('Error loading website details', 'error');
+            }
+        }
+        
+        // Display website details
+        function displayWebsiteDetails(website) {
+            const container = document.getElementById('website-content');
+            
+            container.innerHTML = `
+                <div class="bg-gray-700 rounded-lg p-4 mb-4">
+                    <h4 class="font-bold text-xl mb-3">${website.title || 'No Title'}</h4>
+                    <p class="text-blue-400 mb-2">${website.url}</p>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div><span class="text-gray-400">Status:</span> <span class="${getStatusColor(website.status_code)}">${website.status_code}</span></div>
+                        <div><span class="text-gray-400">Domain:</span> ${website.domain}</div>
+                        <div><span class="text-gray-400">Depth:</span> ${website.depth}</div>
+                        <div><span class="text-gray-400">Links:</span> ${website.links_count}</div>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-700 rounded-lg p-4 mb-4">
+                    <h5 class="font-bold mb-2">Content</h5>
+                    <p class="text-gray-300 text-sm leading-relaxed">${website.content}</p>
+                </div>
+                
+                <div class="bg-gray-700 rounded-lg p-4 mb-4">
+                    <h5 class="font-bold mb-2">Crawl Information</h5>
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        <div><span class="text-gray-400">Crawl Time:</span> ${website.crawl_time.toFixed(2)}s</div>
+                        <div><span class="text-gray-400">Timestamp:</span> ${new Date(website.crawl_timestamp).toLocaleString()}</div>
+                        <div><span class="text-gray-400">Created:</span> ${new Date(website.created_at).toLocaleString()}</div>
+                    </div>
+                </div>
+                
+                ${website.outgoing_links && website.outgoing_links.length > 0 ? `
+                    <div class="bg-gray-700 rounded-lg p-4">
+                        <h5 class="font-bold mb-2">Outgoing Links (${website.outgoing_links.length})</h5>
+                        <div class="max-h-40 overflow-y-auto">
+                            ${website.outgoing_links.map(link => `
+                                <div class="text-blue-400 text-sm py-1 hover:text-blue-300 cursor-pointer" onclick="window.open('${link}', '_blank')">
+                                    ${link}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+            `;
+        }
+        
+        // Close website modal
+        function closeWebsiteModal() {
+            document.getElementById('website-modal').classList.add('hidden');
+        }
+        
+        // Toggle advanced options
+        function toggleAdvancedOptions() {
+            const advancedOptions = document.getElementById('advanced-options');
+            const isHidden = advancedOptions.classList.contains('hidden');
+            
+            if (isHidden) {
+                advancedOptions.classList.remove('hidden');
+                document.getElementById('advanced-toggle').innerHTML = '<i class="fas fa-cog mr-2"></i>Hide Advanced Options';
+            } else {
+                advancedOptions.classList.add('hidden');
+                document.getElementById('advanced-toggle').innerHTML = '<i class="fas fa-cog mr-2"></i>Advanced Options';
+            }
+        }
+        
+        // Cleanup old data
+        async function cleanupOldData() {
+            if (!confirm('This will delete websites older than 30 days. Continue?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/database/cleanup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ days_old: 30 })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast(result.message, 'success');
+                    loadDatabaseStatistics();
+                    if (searchQuery) {
+                        performSearch(new Event('submit'));
+                    }
+                } else {
+                    showToast(`Error: ${result.error}`, 'error');
+                }
+                
+            } catch (error) {
+                console.error('Error cleaning up old data:', error);
+                showToast('Error cleaning up old data', 'error');
+            }
+        }
+        
+        // Export database data
+        function exportDatabaseData() {
+            showToast('Export functionality coming soon!', 'info');
+        }
+        
+        // Utility functions
+        function highlightSearchTerms(text) {
+            if (!searchQuery || !text) return text;
+            
+            const regex = new RegExp(`(${searchQuery})`, 'gi');
+            return text.replace(regex, '<span class="search-highlight">$1</span>');
+        }
+        
+        function getStatusColor(statusCode) {
+            if (statusCode >= 200 && statusCode < 300) return 'bg-green-600';
+            if (statusCode >= 400 && statusCode < 500) return 'bg-yellow-600';
+            if (statusCode >= 500) return 'bg-red-600';
+            return 'bg-gray-600';
+        }
+        
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colors = {
+                success: 'bg-green-600',
+                error: 'bg-red-600',
+                warning: 'bg-yellow-600',
+                info: 'bg-blue-600'
+            };
+            
+            toast.className = `${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full`;
+            toast.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'exclamation-triangle' : 'info-circle'} mr-2"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Animate in
+            setTimeout(() => toast.classList.remove('translate-x-full'), 100);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                toast.classList.add('translate-x-full');
+                setTimeout(() => container.removeChild(toast), 300);
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
