@@ -1,0 +1,19 @@
+{
+  "name": "alopecosa-crawler",
+  "version": "1.0.0",
+  "description": "Spider-inspired web crawler with modern web interface",
+  "main": "src/web_interface/web_interface.py",
+  "scripts": {
+    "build": "pip install -r requirements.txt",
+    "start": "python src/web_interface/web_interface.py",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production"
+  },
+  "keywords": ["web-crawler", "spider", "flask", "cloudflare"],
+  "author": "Your Name",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

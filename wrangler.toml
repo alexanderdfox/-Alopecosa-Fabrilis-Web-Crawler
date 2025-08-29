@@ -1,0 +1,26 @@
+name = "alopecosa-crawler"
+main = "src/cloudflare_worker.py"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[env.production]
+name = "alopecosa-crawler-prod"
+
+[env.staging]
+name = "alopecosa-crawler-staging"
+
+[build]
+command = "pip install -r requirements.txt"
+
+[site]
+bucket = "./templates"
+entry-point = "src"
+
+[triggers]
+crons = []
+
+[env.production.vars]
+ENVIRONMENT = "production"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
