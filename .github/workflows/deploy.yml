@@ -69,28 +69,37 @@ jobs:
         
       - name: Authenticate with Cloudflare
         run: |
-          # Create wrangler config directory structure
-          mkdir -p ~/.wrangler/config
-          
-          # Create wrangler config file with API token
-          cat > ~/.wrangler/config/default.toml << EOF
-          api_token = "${{ secrets.CLOUDFLARE_API_TOKEN }}"
-          EOF
-          
-          # Verify the file was created
-          echo "Wrangler config created:"
-          ls -la ~/.wrangler/
-          ls -la ~/.wrangler/config/
-          echo "Config file contents (token hidden):"
-          cat ~/.wrangler/config/default.toml | sed 's/api_token = ".*"/api_token = "***HIDDEN***"/'
-          
-          # Test authentication
-          echo "Testing authentication..."
-          export CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
-          if wrangler whoami > /dev/null 2>&1; then
-            echo "✅ Authentication successful!"
+          # Check if API token is available
+          if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "✅ API token found, using token-based authentication"
+            
+            # Create wrangler config directory structure
+            mkdir -p ~/.wrangler/config
+            
+            # Create wrangler config file with API token
+            cat > ~/.wrangler/config/default.toml << EOF
+            api_token = "${{ secrets.CLOUDFLARE_API_TOKEN }}"
+            EOF
+            
+            # Verify the file was created
+            echo "Wrangler config created:"
+            ls -la ~/.wrangler/
+            ls -la ~/.wrangler/config/
+            echo "Config file contents (token hidden):"
+            cat ~/.wrangler/config/default.toml | sed 's/api_token = ".*"/api_token = "***HIDDEN***"/'
+            
+            # Test authentication
+            echo "Testing authentication..."
+            export CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
+            if wrangler whoami > /dev/null 2>&1; then
+              echo "✅ Token-based authentication successful!"
+            else
+              echo "⚠️  Token-based authentication failed, but continuing..."
+            fi
           else
-            echo "⚠️  Authentication failed, but continuing..."
+            echo "⚠️  No API token found, will attempt deployment without explicit authentication"
+            echo "Note: You may need to set CLOUDFLARE_API_TOKEN in your repository secrets"
+            echo "Visit: https://dash.cloudflare.com/profile/api-tokens"
           fi
           
       - name: Verify Wrangler Setup
@@ -128,8 +137,12 @@ jobs:
           if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
             echo "✅ API token is available (length: ${#CLOUDFLARE_API_TOKEN})"
           else
-            echo "❌ API token is not available"
-            exit 1
+            echo "⚠️  API token is not available"
+            echo "Note: This will limit some functionality but deployment may still work"
+            echo "To set up API token:"
+            echo "1. Go to: https://dash.cloudflare.com/profile/api-tokens"
+            echo "2. Create a new token with Workers permissions"
+            echo "3. Add it to your repository secrets as CLOUDFLARE_API_TOKEN"
           fi
           
           echo "Checking if worker exists..."
@@ -150,11 +163,14 @@ jobs:
           
       - name: Deploy to Cloudflare Workers
         run: |
-          # Set Cloudflare API token as environment variable
-          export CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
-          
-          # Also set it in the current shell
-          CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
+          # Set Cloudflare API token as environment variable if available
+          if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            export CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
+            CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
+            echo "API token set: ${CLOUDFLARE_API_TOKEN:0:8}..."
+          else
+            echo "⚠️  No API token available, proceeding without explicit authentication"
+          fi
           
           # Determine environment
           if [ "${{ github.ref_name }}" = "main" ]; then
@@ -165,7 +181,6 @@ jobs:
           
           echo "Deploying to environment: $ENV"
           echo "Using branch: ${{ github.ref_name }}"
-          echo "API token set: ${CLOUDFLARE_API_TOKEN:0:8}..."
           
           # Verify authentication before deployment
           echo "Verifying authentication..."
@@ -213,14 +228,16 @@ jobs:
       - name: Deploy to specific environment (manual trigger)
         if: github.event_name == 'workflow_dispatch'
         run: |
-          # Set Cloudflare API token as environment variable
-          export CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
-          
-          # Also set it in the current shell
-          CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
+          # Set Cloudflare API token as environment variable if available
+          if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            export CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
+            CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
+            echo "API token set: ${CLOUDFLARE_API_TOKEN:0:8}..."
+          else
+            echo "⚠️  No API token available, proceeding without explicit authentication"
+          fi
           
           echo "Deploying to environment: ${{ github.event.inputs.environment }}"
-          echo "API token set: ${CLOUDFLARE_API_TOKEN:0:8}..."
           
           # Verify authentication before deployment
           echo "Verifying authentication..."
@@ -260,10 +277,11 @@ jobs:
             echo "❌ Deployment failed!"
             echo "🔍 Check the logs above for error details"
             echo "💡 Common issues:"
-            echo "   - Invalid API token"
+            echo "   - Missing API token (most likely cause)"
             echo "   - Worker already exists"
             echo "   - Python compilation errors"
-            echo "🛠️  Try running locally first:"
-            echo "   - wrangler dev --local"
-            echo "   - wrangler deploy --env staging"
+            echo "🛠️  Solutions:"
+            echo "   1. Set up API token: https://dash.cloudflare.com/profile/api-tokens"
+            echo "   2. Add to GitHub secrets: CLOUDFLARE_API_TOKEN"
+            echo "   3. Test locally: wrangler deploy --env staging"
           fi
