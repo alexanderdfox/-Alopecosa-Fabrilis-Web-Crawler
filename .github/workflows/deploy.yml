@@ -63,13 +63,29 @@ jobs:
         
       - name: Authenticate with Cloudflare
         run: |
-          # Create wrangler config directory
-          mkdir -p ~/.wrangler
+          # Create wrangler config directory structure
+          mkdir -p ~/.wrangler/config
           
           # Create wrangler config file with API token
           cat > ~/.wrangler/config/default.toml << EOF
           api_token = "${{ secrets.CLOUDFLARE_API_TOKEN }}"
           EOF
+          
+          # Verify the file was created
+          echo "Wrangler config created:"
+          ls -la ~/.wrangler/
+          ls -la ~/.wrangler/config/
+          echo "Config file contents (token hidden):"
+          cat ~/.wrangler/config/default.toml | sed 's/api_token = ".*"/api_token = "***HIDDEN***"/'
+          
+          # Test authentication
+          echo "Testing authentication..."
+          export CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
+          if wrangler whoami > /dev/null 2>&1; then
+            echo "✅ Authentication successful!"
+          else
+            echo "⚠️  Authentication failed, but continuing..."
+          fi
           
       - name: Verify Wrangler Setup
         run: |
@@ -87,6 +103,14 @@ jobs:
           
           echo "Wrangler configuration file:"
           cat wrangler.toml
+          
+          echo "Checking API token availability..."
+          if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "✅ API token is available (length: ${#CLOUDFLARE_API_TOKEN})"
+          else
+            echo "❌ API token is not available"
+            exit 1
+          fi
           
           echo "Checking if worker exists..."
           if wrangler whoami > /dev/null 2>&1; then
@@ -106,8 +130,11 @@ jobs:
           
       - name: Deploy to Cloudflare Workers
         run: |
-          # Set Cloudflare API token
-          export CLOUDFLARE_API_TOKEN=${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Set Cloudflare API token as environment variable
+          export CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
+          
+          # Also set it in the current shell
+          CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
           
           # Determine environment
           if [ "${{ github.ref_name }}" = "main" ]; then
@@ -118,6 +145,15 @@ jobs:
           
           echo "Deploying to environment: $ENV"
           echo "Using branch: ${{ github.ref_name }}"
+          echo "API token set: ${CLOUDFLARE_API_TOKEN:0:8}..."
+          
+          # Verify authentication before deployment
+          echo "Verifying authentication..."
+          if wrangler whoami > /dev/null 2>&1; then
+            echo "✅ Authentication verified, proceeding with deployment..."
+          else
+            echo "⚠️  Authentication failed, but attempting deployment anyway..."
+          fi
           
           # Check if worker exists and deploy
           echo "Attempting deployment..."
@@ -157,10 +193,22 @@ jobs:
       - name: Deploy to specific environment (manual trigger)
         if: github.event_name == 'workflow_dispatch'
         run: |
-          # Set Cloudflare API token
-          export CLOUDFLARE_API_TOKEN=${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Set Cloudflare API token as environment variable
+          export CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
+          
+          # Also set it in the current shell
+          CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
           
           echo "Deploying to environment: ${{ github.event.inputs.environment }}"
+          echo "API token set: ${CLOUDFLARE_API_TOKEN:0:8}..."
+          
+          # Verify authentication before deployment
+          echo "Verifying authentication..."
+          if wrangler whoami > /dev/null 2>&1; then
+            echo "✅ Authentication verified, proceeding with deployment..."
+          else
+            echo "⚠️  Authentication failed, but attempting deployment anyway..."
+          fi
           
           # Check if worker exists and deploy
           echo "Attempting manual deployment..."
