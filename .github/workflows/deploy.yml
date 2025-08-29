@@ -105,7 +105,9 @@ jobs:
             if wrangler whoami > /dev/null 2>&1; then
               echo "✅ Token-based authentication successful!"
             else
-              echo "⚠️  Token-based authentication failed, but continuing..."
+              echo "❌ Token-based authentication failed"
+              echo "This may indicate an invalid API token"
+              exit 1
             fi
           else
             echo "⚠️  No API token found, will attempt deployment without explicit authentication"
@@ -119,6 +121,8 @@ jobs:
           fi
           
       - name: Verify Wrangler Setup
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           echo "Node.js environment:"
           echo "  Node: $(node --version)"
@@ -166,15 +170,12 @@ jobs:
           echo "  pip: $(pip3 --version)"
           
           echo "Checking API token availability..."
-          if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
             echo "✅ API token is available (length: ${#CLOUDFLARE_API_TOKEN})"
           else
-            echo "⚠️  API token is not available"
-            echo "Note: This will limit some functionality but deployment may still work"
-            echo "To set up API token:"
-            echo "1. Go to: https://dash.cloudflare.com/profile/api-tokens"
-            echo "2. Create a new token with Workers permissions"
-            echo "3. Add it to your repository secrets as CLOUDFLARE_API_TOKEN"
+            echo "❌ API token is not available"
+            echo "This will prevent deployment from working"
+            echo "Please ensure CLOUDFLARE_API_TOKEN is set in repository secrets"
           fi
           
           echo "Checking if worker exists..."
@@ -194,14 +195,18 @@ jobs:
           fi
           
       - name: Deploy to Cloudflare Workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           # Set Cloudflare API token as environment variable if available
           if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
             export CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
-            CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
             echo "API token set: ${CLOUDFLARE_API_TOKEN:0:8}..."
           else
-            echo "⚠️  No API token available, proceeding without explicit authentication"
+            echo "❌ No API token available - deployment will fail"
+            echo "Please set CLOUDFLARE_API_TOKEN in your repository secrets"
+            echo "Visit: https://dash.cloudflare.com/profile/api-tokens"
+            exit 1
           fi
           
           # Determine environment
@@ -219,35 +224,31 @@ jobs:
           if wrangler whoami > /dev/null 2>&1; then
             echo "✅ Authentication verified, proceeding with deployment..."
           else
-            echo "⚠️  Authentication failed, but attempting deployment anyway..."
+            echo "❌ Authentication failed - cannot proceed"
+            exit 1
           fi
           
-          # Check if worker exists and deploy
+          # Deploy the worker
           echo "Attempting deployment..."
           if wrangler deploy --env $ENV; then
-            echo "Deployment completed successfully!"
+            echo "✅ Deployment completed successfully!"
           else
-            echo "Deployment failed, checking error..."
-            echo "Attempting to create worker with --force flag..."
-            # If deployment fails, try to create the worker first
-            if wrangler deploy --env $ENV --force; then
-              echo "Worker created and deployed successfully!"
-            else
-              echo "Failed to create worker, exiting with error"
-              exit 1
-            fi
+            echo "❌ Deployment failed"
+            exit 1
           fi
           
       - name: Verify Deployment
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           echo "Waiting for deployment to stabilize..."
           sleep 10
           
           echo "Checking worker status..."
           if wrangler whoami; then
-            echo "Worker authentication successful!"
+            echo "✅ Worker authentication successful!"
           else
-            echo "Worker authentication failed, but deployment may still be successful"
+            echo "❌ Worker authentication failed"
           fi
           
           echo "Checking deployment status..."
@@ -259,15 +260,19 @@ jobs:
           
       - name: Deploy to specific environment (manual trigger)
         if: github.event_name == 'workflow_dispatch'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           # Set Cloudflare API token as environment variable if available
           if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
             export CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
-            CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
             echo "API token set: ${CLOUDFLARE_API_TOKEN:0:8}..."
           else
-            echo "⚠️  No API token available, proceeding without explicit authentication"
-          fi
+            echo "❌ No API token available - deployment will fail"
+            echo "Please set CLOUDFLARE_API_TOKEN in your repository secrets"
+            echo "Visit: https://dash.cloudflare.com/profile/api-tokens"
+            exit 1
+            fi
           
           echo "Deploying to environment: ${{ github.event.inputs.environment }}"
           
@@ -276,23 +281,17 @@ jobs:
           if wrangler whoami > /dev/null 2>&1; then
             echo "✅ Authentication verified, proceeding with deployment..."
           else
-            echo "⚠️  Authentication failed, but attempting deployment anyway..."
+            echo "❌ Authentication failed - cannot proceed"
+            exit 1
           fi
           
-          # Check if worker exists and deploy
+          # Deploy the worker
           echo "Attempting manual deployment..."
           if wrangler deploy --env ${{ github.event.inputs.environment }}; then
-            echo "Manual deployment completed successfully!"
+            echo "✅ Manual deployment completed successfully!"
           else
-            echo "Manual deployment failed, checking error..."
-            echo "Attempting to create worker with --force flag..."
-            # If deployment fails, try to create the worker first
-            if wrangler deploy --env ${{ github.event.inputs.environment }} --force; then
-              echo "Worker created and deployed successfully!"
-            else
-              echo "Failed to create worker, exiting with error"
-              exit 1
-            fi
+            echo "❌ Manual deployment failed"
+            exit 1
           fi
           
       - name: Notify deployment status
