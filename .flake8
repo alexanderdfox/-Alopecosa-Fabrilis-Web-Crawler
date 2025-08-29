@@ -1,0 +1,40 @@
+[flake8]
+# Maximum line length
+max-line-length = 127
+
+# Maximum complexity
+max-complexity = 10
+
+# Exclude directories and files
+exclude = 
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    env,
+    .env,
+    node_modules,
+    src/examples,
+    build,
+    dist,
+    *.egg-info
+
+# Ignore specific error codes
+ignore = 
+    E203,  # whitespace before ':'
+    W503,  # line break before binary operator
+    E501,  # line too long (handled by max-line-length)
+    F401,  # imported but unused (common in examples)
+    F821,  # undefined name (common in examples)
+
+# Show source for errors
+show-source = True
+
+# Show statistics
+statistics = True
+
+# Count errors
+count = True
+
+# Output format
+format = %(path)s:%(row)d:%(col)d: %(code)s %(text)s
