@@ -58,6 +58,10 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    
+    # Command override for development mode
+    # Uncomment the line below to use development launcher instead of Gunicorn
+    # command: ["python", "launch_web.py"]
 
   # Optional: Add a simple nginx reverse proxy for production
   nginx:

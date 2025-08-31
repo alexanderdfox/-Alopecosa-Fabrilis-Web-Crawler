@@ -20,8 +20,16 @@ def main():
         print("\n💡 Press Ctrl+C to stop the server")
         print("=" * 50)
         
-        # Run the Flask app
-        socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+        # Check if running in production mode
+        is_production = os.getenv('FLASK_ENV') == 'production'
+        
+        # Run the Flask app with appropriate settings
+        if is_production:
+            print("🏭 Running in production mode")
+            socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
+        else:
+            print("🔧 Running in development mode")
+            socketio.run(app, host='0.0.0.0', port=5000, debug=True)
         
     except KeyboardInterrupt:
         print("\n🛑 Web interface stopped by user")

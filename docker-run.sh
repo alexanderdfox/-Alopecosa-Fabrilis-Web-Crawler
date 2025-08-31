@@ -88,7 +88,8 @@ run_dev() {
     create_env_file
     create_directories
     
-    docker-compose up --build
+    # Use development override for development mode
+    docker-compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 }
 
 # Function to run in production mode

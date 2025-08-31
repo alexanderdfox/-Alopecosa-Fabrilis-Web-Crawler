@@ -48,7 +48,8 @@ class AlopecosaCrawler:
                  max_pages: int = 100,
                  delay_range: tuple = (1, 3),
                  user_agent: str = None,
-                 respect_robots: bool = True):
+                 respect_robots: bool = True,
+                 allow_external_links: bool = False):
         
         self.base_url = base_url
         self.domain = urlparse(base_url).netloc
@@ -56,6 +57,7 @@ class AlopecosaCrawler:
         self.max_pages = max_pages
         self.delay_range = delay_range
         self.respect_robots = respect_robots
+        self.allow_external_links = allow_external_links
         
         # Spider-like behavior attributes
         self.hunting_mode = True  # Active hunting vs passive waiting
@@ -86,6 +88,9 @@ class AlopecosaCrawler:
         # Load robots.txt if respecting robots
         if self.respect_robots:
             self._load_robots_txt()
+        
+        # Test network connectivity
+        self._test_network_connectivity()
     
     def _setup_logging(self):
         """Setup logging for the crawler"""
@@ -98,6 +103,19 @@ class AlopecosaCrawler:
             ]
         )
         self.logger = logging.getLogger(__name__)
+    
+    def _test_network_connectivity(self):
+        """Test if the crawler can make HTTP requests"""
+        try:
+            self.logger.info("Testing network connectivity...")
+            test_response = self.session.get("https://httpbin.org/get", timeout=10)
+            if test_response.status_code == 200:
+                self.logger.info("Network connectivity test passed")
+            else:
+                self.logger.warning(f"Network connectivity test failed with status {test_response.status_code}")
+        except Exception as e:
+            self.logger.error(f"Network connectivity test failed: {e}")
+            self.logger.warning("Crawler may not be able to make HTTP requests")
     
     def _load_robots_txt(self):
         """Load and parse robots.txt file"""
@@ -116,23 +134,42 @@ class AlopecosaCrawler:
     
     def _is_allowed_url(self, url: str) -> bool:
         """Check if URL is allowed according to robots.txt and domain restrictions"""
-        parsed = urlparse(url)
-        
-        # Check domain restriction
-        if parsed.netloc != self.domain:
-            return False
-        
-        # Check robots.txt (simplified)
-        if self.respect_robots and self.robots_content:
-            if 'Disallow: /' in self.robots_content:
+        try:
+            parsed = urlparse(url)
+            
+            # Check if URL is valid
+            if not parsed.scheme or not parsed.netloc:
+                self.logger.debug(f"Invalid URL structure: {url}")
                 return False
-        
-        # Avoid common non-content URLs
-        excluded_extensions = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.mp4', '.mp3'}
-        if any(url.lower().endswith(ext) for ext in excluded_extensions):
+            
+            # Check domain restriction - be more lenient for subdomains
+            if not self.allow_external_links:
+                if parsed.netloc != self.domain and not parsed.netloc.endswith('.' + self.domain):
+                    self.logger.debug(f"Domain mismatch: {parsed.netloc} vs {self.domain}")
+                    return False
+            
+            # Check robots.txt (simplified)
+            if self.respect_robots and self.robots_content:
+                if 'Disallow: /' in self.robots_content:
+                    self.logger.debug(f"Disallowed by robots.txt: {url}")
+                    return False
+            
+            # Avoid common non-content URLs
+            excluded_extensions = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.mp4', '.mp3', '.zip', '.rar', '.exe', '.css', '.js'}
+            if any(url.lower().endswith(ext) for ext in excluded_extensions):
+                self.logger.debug(f"Excluded extension: {url}")
+                return False
+            
+            # Avoid very long URLs
+            if len(url) > 2048:
+                self.logger.debug(f"URL too long: {url}")
+                return False
+            
+            # Allow common content URLs
+            return True
+        except Exception as e:
+            self.logger.warning(f"Error validating URL {url}: {e}")
             return False
-        
-        return True
     
     def _hunt_for_prey(self, soup: BeautifulSoup, current_url: str) -> List[str]:
         """
@@ -140,26 +177,62 @@ class AlopecosaCrawler:
         Identifies URLs that seem "rich" in content or links.
         """
         links = []
-        link_elements = soup.find_all('a', href=True)
         
-        for link in link_elements:
-            href = link.get('href')
-            absolute_url = urljoin(current_url, href)
+        try:
+            # Limit the number of links to process to prevent recursion
+            link_elements = soup.find_all('a', href=True, limit=1000)
             
-            if not self._is_allowed_url(absolute_url):
-                continue
+            self.logger.debug(f"Found {len(link_elements)} link elements on {current_url}")
             
-            # Spider-like prey detection: look for "rich" areas
-            link_text = link.get_text(strip=True)
-            link_count = len(link.find_all('a')) if link.find_all('a') else 0
-            
-            # If this link leads to an area with many sub-links, it's promising
-            if link_count > self.link_density_threshold:
-                self.prey_scent.add(absolute_url)
-                self.logger.info(f"Found rich hunting ground: {absolute_url} (links: {link_count})")
-            
-            links.append(absolute_url)
+            for link in link_elements:
+                try:
+                    href = link.get('href')
+                    if not href:
+                        continue
+                        
+                    absolute_url = urljoin(current_url, href)
+                    
+                    self.logger.debug(f"Processing link: {href} -> {absolute_url}")
+                    
+                    if not self._is_allowed_url(absolute_url):
+                        continue
+                    
+                    # Spider-like prey detection: look for "rich" areas
+                    link_text = link.get_text(strip=True)
+                    
+                    # Count direct child links only (avoid recursion) with safety limit
+                    try:
+                        child_links = link.find_all('a', recursive=False, limit=50)
+                        link_count = len(child_links)
+                    except RecursionError:
+                        self.logger.warning(f"Recursion error counting child links for {absolute_url}")
+                        link_count = 0
+                    except Exception as e:
+                        self.logger.warning(f"Error counting child links for {absolute_url}: {e}")
+                        link_count = 0
+                    
+                    # If this link leads to an area with many sub-links, it's promising
+                    if link_count > self.link_density_threshold:
+                        self.prey_scent.add(absolute_url)
+                        self.logger.info(f"Found rich hunting ground: {absolute_url} (links: {link_count})")
+                    
+                    links.append(absolute_url)
+                    
+                except RecursionError as e:
+                    self.logger.error(f"Recursion error processing link {href}: {e}")
+                    continue
+                except Exception as e:
+                    self.logger.warning(f"Error processing link {href}: {e}")
+                    continue
+                    
+        except RecursionError as e:
+            self.logger.error(f"Recursion error in _hunt_for_prey for {current_url}: {e}")
+            return []
+        except Exception as e:
+            self.logger.error(f"Error in _hunt_for_prey for {current_url}: {e}")
+            return []
         
+        self.logger.debug(f"Returning {len(links)} valid links from {current_url}")
         return links
     
     def _adapt_hunting_strategy(self):
@@ -178,6 +251,10 @@ class AlopecosaCrawler:
         if url in self.visited_urls:
             return None
         
+        # Validate URL before processing
+        if not self._is_allowed_url(url):
+            return None
+        
         self.visited_urls.add(url)
         start_time = time.time()
         
@@ -187,17 +264,37 @@ class AlopecosaCrawler:
             time.sleep(delay)
             
             self.logger.info(f"Crawling {url} at depth {depth}")
+            self.logger.debug(f"Making HTTP request to {url}")
             response = self.session.get(url, timeout=15)
+            self.logger.debug(f"Response status: {response.status_code}, content length: {len(response.content)}")
+            
+            # Check for very large responses that might cause recursion
+            if len(response.content) > 5 * 1024 * 1024:  # 5MB limit
+                self.logger.warning(f"Response too large for {url} ({len(response.content)} bytes), skipping")
+                return None
             
             if response.status_code != 200:
                 self.logger.warning(f"Failed to crawl {url}: Status {response.status_code}")
                 return None
             
-            soup = BeautifulSoup(response.content, 'html.parser')
+            # Parse HTML with safety measures to prevent recursion
+            try:
+                soup = BeautifulSoup(response.content, 'html.parser')
+            except RecursionError as e:
+                self.logger.error(f"Recursion error parsing HTML for {url}: {e}")
+                return None
+            except Exception as e:
+                self.logger.error(f"Error parsing HTML for {url}: {e}")
+                return None
             
             # Extract title
             title = soup.find('title')
             title_text = title.get_text(strip=True) if title else "No Title"
+            
+            # Safety check for very large content
+            if len(response.content) > 10 * 1024 * 1024:  # 10MB limit
+                self.logger.warning(f"Content too large for {url}, skipping")
+                return None
             
             # Extract main content (simplified)
             content = ""
@@ -251,23 +348,47 @@ class AlopecosaCrawler:
         """Main crawling method - mimics spider's hunting behavior"""
         self.logger.info(f"Starting Alopecosa Fabrilis crawler on {self.base_url}")
         self.logger.info(f"Max depth: {self.max_depth}, Max pages: {self.max_pages}")
+        self.logger.info(f"Domain: {self.domain}")
         
         pages_crawled = 0
+        max_iterations = self.max_pages * 2  # Prevent infinite loops
+        iteration_count = 0
         
-        while self.url_queue and pages_crawled < self.max_pages:
+        # Set recursion limit for this crawl session
+        import sys
+        original_recursion_limit = sys.getrecursionlimit()
+        try:
+            sys.setrecursionlimit(1000)  # Lower recursion limit for safety
+        except Exception as e:
+            self.logger.warning(f"Could not set recursion limit: {e}")
+        
+        while self.url_queue and pages_crawled < self.max_pages and iteration_count < max_iterations:
+            iteration_count += 1
             current_url, depth = self.url_queue.popleft()
             
+            self.logger.debug(f"Processing URL: {current_url} at depth {depth}")
+            
             if depth > self.max_depth:
+                self.logger.debug(f"Skipping {current_url} - depth {depth} > max_depth {self.max_depth}")
                 continue
             
             result = self._crawl_page(current_url, depth)
             if result:
                 pages_crawled += 1
+                self.logger.info(f"Successfully crawled page {pages_crawled}/{self.max_pages}: {current_url}")
                 
                 # Add new URLs to queue (spider exploring new territory)
+                self.logger.debug(f"Adding {len(result.links)} links to queue from {current_url}")
                 for link in result.links:
                     if link not in self.visited_urls and link not in [url for url, _ in self.url_queue]:
                         self.url_queue.append((link, depth + 1))
+                        self.logger.debug(f"Added to queue: {link} at depth {depth + 1}")
+                    else:
+                        self.logger.debug(f"Skipped duplicate: {link}")
+                
+                self.logger.debug(f"Queue size after adding links: {len(self.url_queue)}")
+            else:
+                self.logger.debug(f"Failed to crawl: {current_url}")
                 
                 # Prioritize URLs with high prey scent (rich areas)
                 if self.prey_scent:
@@ -282,7 +403,15 @@ class AlopecosaCrawler:
                 if pages_crawled % 10 == 0:
                     self._adapt_hunting_strategy()
         
+        # Restore original recursion limit
+        try:
+            sys.setrecursionlimit(original_recursion_limit)
+        except Exception as e:
+            self.logger.warning(f"Could not restore recursion limit: {e}")
+        
         self.logger.info(f"Crawling completed. Crawled {pages_crawled} pages.")
+        if iteration_count >= max_iterations:
+            self.logger.warning("Maximum iterations reached, stopping crawl to prevent infinite loop")
         return self.results
     
     def save_results(self, filename: str = None):

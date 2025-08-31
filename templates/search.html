@@ -123,7 +123,7 @@
                 Advanced Search Options
             </h2>
             
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div>
                     <label class="block text-sm font-medium mb-2">Domain</label>
                     <select id="domain-filter" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500">
@@ -157,6 +157,15 @@
                         <option value="oldest">Oldest First</option>
                         <option value="title">Title A-Z</option>
                         <option value="domain">Domain</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Results Per Page</label>
+                    <select id="page-size" class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="10">10</option>
+                        <option value="20" selected>20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
                     </select>
                 </div>
             </div>
@@ -251,6 +260,10 @@
             document.getElementById('depth-filter').addEventListener('change', performSearch);
             document.getElementById('status-filter').addEventListener('change', performSearch);
             document.getElementById('sort-by').addEventListener('change', performSearch);
+            document.getElementById('page-size').addEventListener('change', function() {
+                // Reset to page 1 when changing page size
+                performSearch(1);
+            });
         }
 
         // Load domains for filter
@@ -278,13 +291,18 @@
             }
         }
 
+        // Global variables for pagination
+        let currentPage = 1;
+        let currentFilters = {};
+
         // Perform search with current filters
-        function performSearch() {
+        function performSearch(page = 1) {
             const query = document.getElementById('main-search').value.trim();
             const domain = document.getElementById('domain-filter').value;
             const depth = document.getElementById('depth-filter').value;
             const status = document.getElementById('status-filter').value;
             const sortBy = document.getElementById('sort-by').value;
+            const pageSize = document.getElementById('page-size').value;
 
             if (!query && !domain && !depth && !status) {
                 showNoResults();
@@ -293,19 +311,27 @@
 
             showLoading();
 
-            const filters = {};
-            if (domain) filters.domain = domain;
-            if (depth) filters.depth = parseInt(depth);
-            if (status) filters.status_code = parseInt(status);
+            // Store current filters for pagination
+            currentFilters = {
+                query: query,
+                domain: domain,
+                depth: depth ? parseInt(depth) : null,
+                status: status ? parseInt(status) : null,
+                sortBy: sortBy,
+                pageSize: parseInt(pageSize)
+            };
+            currentPage = page;
 
             const params = new URLSearchParams();
             if (query) params.append('q', query);
-            if (Object.keys(filters).length > 0) {
-                params.append('filters', JSON.stringify(filters));
-            }
+            if (domain) params.append('domain', domain);
+            if (depth) params.append('depth', depth);
+            if (status) params.append('status_code', status);
             if (sortBy !== 'relevance') {
                 params.append('sort', sortBy);
             }
+            params.append('page', page);
+            params.append('limit', pageSize);
 
             fetch(`/api/database/search?${params.toString()}`)
                 .then(response => response.json())
@@ -391,28 +417,86 @@
             const pagination = document.getElementById('pagination');
             let paginationHTML = '';
             
+            // Page info
+            paginationHTML += `<div class="text-sm text-gray-400 mb-4 text-center">Page ${currentPage} of ${totalPages}</div>`;
+            
+            // Pagination controls
+            paginationHTML += '<div class="flex justify-center items-center space-x-2">';
+            
+            // First page button
+            if (currentPage > 1) {
+                paginationHTML += `<button onclick="goToPage(1)" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-sm">
+                    <i class="fas fa-angle-double-left mr-1"></i>First
+                </button>`;
+            }
+            
             // Previous button
             if (currentPage > 1) {
-                paginationHTML += `<button onclick="goToPage(${currentPage - 1})" class="px-3 py-2 mx-1 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">Previous</button>`;
+                paginationHTML += `<button onclick="goToPage(${currentPage - 1})" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-sm">
+                    <i class="fas fa-angle-left mr-1"></i>Previous
+                </button>`;
             }
             
             // Page numbers
-            for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
-                paginationHTML += `<button onclick="goToPage(${i})" class="px-3 py-2 mx-1 rounded-lg transition-colors ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}">${i}</button>`;
+            const startPage = Math.max(1, currentPage - 2);
+            const endPage = Math.min(totalPages, currentPage + 2);
+            
+            // Show ellipsis if there are pages before startPage
+            if (startPage > 1) {
+                paginationHTML += `<span class="px-3 py-2 text-gray-400">...</span>`;
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHTML += `<button onclick="goToPage(${i})" class="px-3 py-2 mx-1 rounded-lg transition-colors text-sm ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}">${i}</button>`;
+            }
+            
+            // Show ellipsis if there are pages after endPage
+            if (endPage < totalPages) {
+                paginationHTML += `<span class="px-3 py-2 text-gray-400">...</span>`;
             }
             
             // Next button
             if (currentPage < totalPages) {
-                paginationHTML += `<button onclick="goToPage(${currentPage + 1})" class="px-3 py-2 mx-1 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">Next</button>`;
+                paginationHTML += `<button onclick="goToPage(${currentPage + 1})" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-sm">
+                    Next<i class="fas fa-angle-right ml-1"></i>
+                </button>`;
             }
+            
+            // Last page button
+            if (currentPage < totalPages) {
+                paginationHTML += `<button onclick="goToPage(${totalPages})" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-sm">
+                    Last<i class="fas fa-angle-double-right ml-1"></i>
+                </button>`;
+            }
+            
+            paginationHTML += '</div>';
             
             pagination.innerHTML = paginationHTML;
         }
 
         // Go to specific page
         function goToPage(page) {
-            // Update current page and re-run search
-            performSearch();
+            // Restore filters and perform search with new page
+            if (currentFilters.query) {
+                document.getElementById('main-search').value = currentFilters.query;
+            }
+            if (currentFilters.domain) {
+                document.getElementById('domain-filter').value = currentFilters.domain;
+            }
+            if (currentFilters.depth) {
+                document.getElementById('depth-filter').value = currentFilters.depth.toString();
+            }
+            if (currentFilters.status) {
+                document.getElementById('status-filter').value = currentFilters.status.toString();
+            }
+            if (currentFilters.sortBy) {
+                document.getElementById('sort-by').value = currentFilters.sortBy;
+            }
+            if (currentFilters.pageSize) {
+                document.getElementById('page-size').value = currentFilters.pageSize.toString();
+            }
+            
+            performSearch(page);
         }
 
         // View website details
@@ -491,6 +575,9 @@
             document.getElementById('depth-filter').value = '';
             document.getElementById('status-filter').value = '';
             document.getElementById('sort-by').value = 'relevance';
+            document.getElementById('page-size').value = '20';
+            currentPage = 1;
+            currentFilters = {};
             hideSearchResults();
             hideNoResults();
         }

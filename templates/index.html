@@ -243,13 +243,24 @@
     </div>
 
     <script>
-        // Initialize Socket.IO
-        const socket = io();
+        // Initialize Socket.IO with reconnection settings
+        const socket = io({
+            transports: ['websocket', 'polling'],
+            upgrade: true,
+            rememberUpgrade: true,
+            timeout: 60000,
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            maxReconnectionAttempts: 5
+        });
         
         // Global variables
         let crawlers = {};
         let history = [];
         let statsChart = null;
+        let reconnectAttempts = 0;
         
         // Connection status
         socket.on('connect', function() {
@@ -258,10 +269,46 @@
             showToast('Connected to Alopecosa Crawler', 'success');
         });
         
-        socket.on('disconnect', function() {
+        socket.on('disconnect', function(reason) {
             document.getElementById('connection-status').textContent = 'Disconnected';
             document.getElementById('connection-status').parentElement.querySelector('i').className = 'fas fa-circle text-red-400 mr-2';
+            
+            if (reason === 'io server disconnect') {
+                // Server disconnected us, try to reconnect
+                socket.connect();
+            }
+            
             showToast('Disconnected from server', 'error');
+        });
+        
+        socket.on('reconnect', function(attemptNumber) {
+            document.getElementById('connection-status').textContent = 'Connected';
+            document.getElementById('connection-status').parentElement.querySelector('i').className = 'fas fa-circle text-green-400 mr-2';
+            showToast('Reconnected to server', 'success');
+            reconnectAttempts = 0;
+        });
+        
+        socket.on('reconnect_attempt', function(attemptNumber) {
+            document.getElementById('connection-status').textContent = `Reconnecting... (${attemptNumber})`;
+            document.getElementById('connection-status').parentElement.querySelector('i').className = 'fas fa-circle text-yellow-400 mr-2';
+        });
+        
+        socket.on('reconnect_failed', function() {
+            document.getElementById('connection-status').textContent = 'Connection Failed';
+            document.getElementById('connection-status').parentElement.querySelector('i').className = 'fas fa-circle text-red-400 mr-2';
+            showToast('Failed to reconnect to server', 'error');
+        });
+        
+        // Heartbeat mechanism to keep connection alive
+        setInterval(function() {
+            if (socket.connected) {
+                socket.emit('ping');
+            }
+        }, 30000); // Send ping every 30 seconds
+        
+        socket.on('pong', function() {
+            // Connection is alive
+            console.log('Server heartbeat received');
         });
         
         // Crawler status updates

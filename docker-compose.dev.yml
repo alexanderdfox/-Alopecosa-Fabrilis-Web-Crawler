@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  alopecosa-crawler:
+    environment:
+      - FLASK_ENV=development
+    command: ["python", "launch_web.py"]
+    volumes:
+      # Mount source code for development
+      - ./src:/app/src:ro
+    # Development mode uses Flask development server
+    # Production mode uses Gunicorn WSGI server

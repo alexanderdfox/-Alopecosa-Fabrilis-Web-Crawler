@@ -8,7 +8,8 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     FLASK_APP=src/web_interface/web_interface.py \
-    FLASK_ENV=production
+    FLASK_ENV=production \
+    WERKZEUG_RUN_MAIN=true
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -43,5 +44,6 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5000/ || exit 1
 
 # Default command to run the web interface
-CMD ["python", "launch_web.py"]
+# Use Gunicorn for production, launch_web.py for development
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "wsgi:application"]
 

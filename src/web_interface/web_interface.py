@@ -37,12 +37,122 @@ template_dir = os.path.join(project_root, 'templates')
 
 app = Flask(__name__, template_folder=template_dir)
 app.config['SECRET_KEY'] = 'alopecosa-fabrilis-spider-2024'
-socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Flask configuration to prevent response conflicts
+app.config['PROPAGATE_EXCEPTIONS'] = True
+app.config['PRESERVE_CONTEXT_ON_EXCEPTION'] = False
+app.config['TESTING'] = False
+app.config['DEBUG'] = False
+
+# SocketIO configuration for production
+try:
+    # Try gevent async mode first (for production)
+    socketio = SocketIO(
+        app, 
+        cors_allowed_origins="*",
+        async_mode='gevent',
+        ping_timeout=60,
+        ping_interval=25,
+        max_http_buffer_size=1e8,
+        logger=True,
+        engineio_logger=True,
+        allow_upgrades=True,
+        transports=['polling', 'websocket'],  # Try polling first
+        always_connect=True,
+        manage_session=False,
+        json=json
+    )
+    logger.info("SocketIO initialized with gevent async mode")
+except Exception as e:
+    logger.warning(f"Failed to initialize SocketIO with gevent: {e}")
+    # Fallback to threading mode
+    socketio = SocketIO(
+        app, 
+        cors_allowed_origins="*",
+        async_mode='threading',
+        ping_timeout=60,
+        ping_interval=25,
+        max_http_buffer_size=1e8,
+        logger=True,
+        engineio_logger=True,
+        allow_upgrades=True,
+        transports=['polling', 'websocket'],  # Try polling first
+        always_connect=True,
+        manage_session=False,
+        json=json
+    )
+    logger.info("SocketIO initialized with threading async mode")
 
 # Global variables for crawler management
 active_crawlers = {}
 crawler_queue = queue.Queue()
 crawler_results = {}
+
+# SocketIO event handlers
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    try:
+        logger.info(f"Client connected: {request.sid}")
+        # Use emit with error handling
+        try:
+            socketio.emit('server_status', {'status': 'connected'}, room=request.sid)
+        except Exception as emit_error:
+            logger.error(f"Error emitting server_status: {emit_error}")
+    except Exception as e:
+        logger.error(f"Error handling client connection: {e}")
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle client disconnection"""
+    try:
+        logger.info(f"Client disconnected: {request.sid}")
+    except Exception as e:
+        logger.error(f"Error handling client disconnection: {e}")
+
+@socketio.on('ping')
+def handle_ping():
+    """Handle ping from client to keep connection alive"""
+    try:
+        # Use emit with error handling
+        try:
+            socketio.emit('pong', room=request.sid)
+        except Exception as emit_error:
+            logger.error(f"Error emitting pong: {emit_error}")
+    except Exception as e:
+        logger.error(f"Error handling ping: {e}")
+
+@socketio.on('error')
+def handle_error(data):
+    """Handle SocketIO errors"""
+    logger.error(f"SocketIO error: {data}")
+
+# Flask error handlers to prevent response conflicts
+@app.errorhandler(500)
+def internal_error(error):
+    """Handle internal server errors"""
+    logger.error(f"Internal server error: {error}")
+    return jsonify({'error': 'Internal server error'}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Handle all exceptions to prevent response conflicts"""
+    logger.error(f"Unhandled exception: {e}")
+    return jsonify({'error': 'Server error'}), 500
+
+# Middleware to handle response conflicts
+@app.before_request
+def before_request():
+    """Handle pre-request processing"""
+    pass
+
+@app.after_request
+def after_request(response):
+    """Handle post-request processing"""
+    # Ensure proper response handling
+    if response.status_code >= 400:
+        logger.warning(f"Request failed with status {response.status_code}")
+    return response
 
 class WebCrawlerManager:
     """Manages crawler instances and provides web interface functionality"""
@@ -75,7 +185,8 @@ class WebCrawlerManager:
                 base_url=base_url,
                 max_depth=max_depth,
                 max_pages=max_pages,
-                delay_range=delay_range
+                delay_range=delay_range,
+                allow_external_links=True  # Allow external links for better crawling
             )
             
             crawler_id = f"crawler_{int(time.time())}_{name}"
@@ -135,14 +246,20 @@ class WebCrawlerManager:
             crawler_info['progress'] = 0
             
             # Emit status update
-            socketio.emit('crawler_status', {
-                'crawler_id': crawler_id,
-                'status': 'running',
-                'progress': 0
-            })
+            try:
+                socketio.emit('crawler_status', {
+                    'crawler_id': crawler_id,
+                    'status': 'running',
+                    'progress': 0
+                })
+            except Exception as e:
+                logger.error(f"Error emitting crawler_status: {e}")
             
             # Start crawling
+            logger.info(f"Starting crawler for {crawler.base_url} with max_depth={crawler.max_depth}, max_pages={crawler.max_pages}")
+            logger.info(f"Crawler domain: {crawler.domain}, allow_external_links: {crawler.allow_external_links}")
             results = crawler.crawl()
+            logger.info(f"Crawler completed. Found {len(results)} results")
             
             # Update results and stats
             crawler_info['results'] = results
@@ -162,8 +279,8 @@ class WebCrawlerManager:
                 session_id = db_manager.store_crawl_results(
                     session_name=crawler_info['name'],
                     base_url=crawler_info['base_url'],
-                    max_depth=crawler.instance.max_depth,
-                    max_pages=crawler.instance.max_pages,
+                    max_depth=crawler.max_depth,
+                    max_pages=crawler.max_pages,
                     results=results,
                     start_time=crawler_info['start_time'],
                     end_time=crawler_info['end_time'],
@@ -181,21 +298,27 @@ class WebCrawlerManager:
             self._add_to_history(crawler_id)
             
             # Emit completion
-            socketio.emit('crawler_completed', {
-                'crawler_id': crawler_id,
-                'results_count': len(results),
-                'stats': crawler_info['stats']
-            })
+            try:
+                socketio.emit('crawler_completed', {
+                    'crawler_id': crawler_id,
+                    'results_count': len(results),
+                    'stats': crawler_info['stats']
+                })
+            except Exception as e:
+                logger.error(f"Error emitting crawler_completed: {e}")
             
         except Exception as e:
             crawler_info['status'] = 'error'
             crawler_info['end_time'] = datetime.now()
             crawler_info['logs'].append(f"Error: {str(e)}")
             
-            socketio.emit('crawler_error', {
-                'crawler_id': crawler_id,
-                'error': str(e)
-            })
+            try:
+                socketio.emit('crawler_error', {
+                    'crawler_id': crawler_id,
+                    'error': str(e)
+                })
+            except Exception as emit_error:
+                logger.error(f"Error emitting crawler_error: {emit_error}")
     
     def _add_to_history(self, crawler_id):
         """Add completed crawler to history"""
@@ -448,6 +571,15 @@ crawler_manager = WebCrawlerManager()
 def index():
     """Main dashboard page"""
     return render_template('index.html')
+
+@app.route('/api/health')
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'socketio_connected': True
+    })
 
 @app.route('/database')
 def database():

@@ -49,6 +49,7 @@ Thumbs.db
 # Docker
 Dockerfile
 docker-compose.yml
+docker-compose.dev.yml
 .dockerignore
 
 # Documentation (optional - remove if you want docs in container)

@@ -33,6 +33,7 @@ cd -Alopecosa-Fabrilis-Web-Crawler
 - **Base Image**: Python 3.11-slim for smaller size
 - **Security**: Non-root user for container security
 - **Dependencies**: Installs system and Python packages
+- **Production Server**: Uses Gunicorn WSGI server
 - **Health Check**: Monitors application health
 - **Port**: Exposes port 5000
 
@@ -48,6 +49,12 @@ cd -Alopecosa-Fabrilis-Web-Crawler
 - **Security Headers**: XSS protection, frame options
 - **Rate Limiting**: Prevents abuse
 - **WebSocket Support**: For real-time features
+
+### `gunicorn.conf.py`
+- **Production WSGI Server**: Gunicorn configuration
+- **Worker Management**: Multi-process setup
+- **Performance**: Optimized for production load
+- **WebSocket Support**: GeventWebSocket worker class
 
 ## 🔧 Configuration
 
@@ -92,7 +99,7 @@ The `docker-run.sh` script can create a `.env` file automatically:
 ```bash
 ./docker-run.sh dev
 ```
-- **Features**: Live logs, hot reloading
+- **Features**: Live logs, hot reloading, Flask development server
 - **Port**: http://localhost:5000
 - **Use Case**: Development and testing
 
@@ -100,7 +107,7 @@ The `docker-run.sh` script can create a `.env` file automatically:
 ```bash
 ./docker-run.sh prod
 ```
-- **Features**: Nginx reverse proxy, security headers
+- **Features**: Nginx reverse proxy, Gunicorn WSGI server, security headers
 - **Port**: http://localhost (nginx) or http://localhost:5000 (direct)
 - **Use Case**: Production deployment
 
